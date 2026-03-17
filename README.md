@@ -2,7 +2,7 @@
 
 Full-stack warehouse and sales management platform.
 **Frontend**: React 18 + Vite → deploy to **Vercel**
-**Backend**: NestJS + PostgreSQL → deploy to **Railway** or any Docker host
+**Backend**: NestJS + PostgreSQL → deploy to **Railway**
 
 Multi-language UI: English / Русский / Тоҷикӣ
 
@@ -18,7 +18,7 @@ Multi-language UI: English / Русский / Тоҷикӣ
 
 ---
 
-## Quick Start (Docker Compose — local)
+## Quick Start (Local Development)
 
 ```bash
 git clone <repo-url>
@@ -33,7 +33,7 @@ docker compose up -d
 # Start frontend (separate terminal)
 cd ../warehouse-ui
 cp .env.example .env.local
-# .env.local already has VITE_API_BASE_URL=http://localhost:8080/api
+# Set VITE_API_BASE_URL=http://localhost:8080/api in .env.local
 npm install && npm run dev
 ```
 
@@ -41,30 +41,20 @@ Open http://localhost:5173 — login with `superadmin` / `Admin@1234`
 
 ---
 
-## Deploy Frontend to Vercel
+## Deploy (One Repo → Vercel + Railway)
 
-1. Push this repo to GitHub
-2. Go to [vercel.com](https://vercel.com) → **New Project** → import from GitHub
-3. Set **Root Directory** to `warehouse-ui`
-4. Add **Environment Variable** in Vercel dashboard:
-   ```
-   VITE_API_BASE_URL = https://your-backend-domain.com/api
-   ```
-5. Deploy — Vercel auto-detects Vite and builds `dist/`
+Both frontend and backend live in the **same GitHub repo**.
+Vercel serves the frontend and proxies `/api/*` to Railway.
 
-> `vercel.json` is already configured for SPA routing.
+### Step 1 — Deploy Backend to Railway
 
----
-
-## Deploy Backend to Railway
-
-1. Go to [railway.app](https://railway.app) → **New Project** → Deploy from GitHub
-2. Set source to `warehouse-backend-node` folder
+1. Go to [railway.app](https://railway.app) → **New Project** → **Deploy from GitHub repo**
+2. Select this repo → set **Root Directory** to `warehouse-backend-node`
 3. Add a **PostgreSQL** plugin — Railway fills `DB_*` vars automatically
-4. Add these environment variables:
+4. Add these environment variables in Railway dashboard:
 
 ```
-JWT_SECRET           = (long random string — generate with: openssl rand -hex 64)
+JWT_SECRET           = (long random string — generate: openssl rand -hex 64)
 CORS_ORIGINS         = https://your-app.vercel.app
 SUPER_ADMIN_USERNAME = superadmin
 SUPER_ADMIN_PASSWORD = YourSecurePassword123
@@ -73,8 +63,24 @@ PORT                 = 8080
 ```
 
 5. Railway detects the `Dockerfile` and deploys automatically
+6. Copy your Railway domain, e.g. `https://wms-backend.railway.app`
 
-After backend deploys, copy the Railway domain and update `VITE_API_BASE_URL` in Vercel.
+### Step 2 — Deploy Frontend to Vercel
+
+1. Go to [vercel.com](https://vercel.com) → **New Project** → import this GitHub repo
+2. **Leave Root Directory empty** (use repo root — `vercel.json` is at root)
+3. Open `vercel.json` at the repo root and replace `YOUR-RAILWAY-APP.railway.app` with your actual Railway domain
+4. Commit and push — Vercel will auto-deploy
+
+> No environment variables needed on Vercel — the proxy in `vercel.json` handles `/api/*` routing.
+
+### Step 3 — Update CORS on Railway
+
+After Vercel gives you a domain (e.g. `https://wms.vercel.app`), update `CORS_ORIGINS` in Railway:
+
+```
+CORS_ORIGINS = https://wms.vercel.app
+```
 
 ---
 
@@ -90,11 +96,6 @@ docker compose up -d
 ---
 
 ## Environment Variables Reference
-
-### Frontend (`warehouse-ui/.env.example`)
-| Variable | Description |
-|----------|-------------|
-| `VITE_API_BASE_URL` | Full URL to backend API, e.g. `https://api.example.com/api` |
 
 ### Backend (`warehouse-backend-node/.env.example`)
 | Variable | Default | Description |
