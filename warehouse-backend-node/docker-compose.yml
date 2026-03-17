@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: wms
+      POSTGRES_USER: wms
+      POSTGRES_PASSWORD: wms
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  api:
+    build: .
+    ports:
+      - '8080:8080'
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms
+      DB_USERNAME: wms
+      DB_PASSWORD: wms
+      JWT_SECRET: WH-404secret-key-for-warehouse-management-system-2024-very-long-key
+      CORS_ORIGINS: http://localhost:5173,http://localhost:3000
+      SUPER_ADMIN_USERNAME: superadmin
+      SUPER_ADMIN_PASSWORD: Admin@1234
+    depends_on:
+      - postgres
+    volumes:
+      - uploads:/app/uploads
+
+volumes:
+  pgdata:
+  uploads:

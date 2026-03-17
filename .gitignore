@@ -1,0 +1,71 @@
+# ─── Java / Maven ────────────────────────────────────────────────────────────
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.nar
+*.zip
+*.tar.gz
+hs_err_pid*
+replay_pid*
+.mvn/wrapper/maven-wrapper.jar
+
+# ─── Node / npm ──────────────────────────────────────────────────────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+dist/
+dist-ssr/
+*.local
+
+# ─── Environment / secrets ───────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env.*.example
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.project
+.classpath
+.settings/
+.factorypath
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+logs/
+*.log
+spring.log
+
+# ─── Test / coverage ─────────────────────────────────────────────────────────
+.nyc_output/
+coverage/
+htmlcov/
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+# Keep docker-compose files tracked; ignore only local overrides
+docker-compose.local.yml
+
+# ─── Backend uploads ─────────────────────────────────────────────────────────
+warehouse-backend-node/uploads/*
+!warehouse-backend-node/uploads/.gitkeep

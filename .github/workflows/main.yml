@@ -1,0 +1,129 @@
+name: Auto Release Build
+
+on:
+  push:
+    branches:
+      - release
+      
+permissions:
+  contents: write
+  
+jobs:
+
+  create-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.tag.outputs.new_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Generate next tag
+        id: tag
+        run: |
+          git fetch --tags
+
+          latest=$(git tag -l "v*" | sort -V | tail -n 1)
+
+          if [ -z "$latest" ]; then
+            new_tag="v1.0.0"
+          else
+            version=${latest#v}
+            IFS='.' read -r major minor patch <<< "$version"
+            patch=$((patch+1))
+            new_tag="v$major.$minor.$patch"
+          fi
+
+          echo "New tag: $new_tag"
+
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+          git tag $new_tag
+          git push origin $new_tag
+
+          echo "new_tag=$new_tag" >> $GITHUB_OUTPUT
+
+  build-ui:
+    needs: create-tag
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: warehouse-ui
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build React App
+        run: npm run build
+
+      - name: Zip UI build
+        run: zip -r warehouse-ui-${{ needs.create-tag.outputs.new_tag }}.zip dist/
+
+      - name: Upload UI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warehouse-ui-${{ needs.create-tag.outputs.new_tag }}
+          path: warehouse-ui/warehouse-ui-${{ needs.create-tag.outputs.new_tag }}.zip
+          retention-days: 1
+
+
+  build-backend:
+    needs: create-tag
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: warehouse-backend
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build Backend
+        run: mvn clean package -DskipTests
+
+      - name: Upload Backend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warehouse-backend-${{ needs.create-tag.outputs.new_tag }}
+          path: warehouse-backend/target/*.jar
+          retention-days: 1
+
+  create-release:
+    needs: [create-tag, build-ui, build-backend]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ needs.create-tag.outputs.new_tag }}
+          files: artifacts/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
