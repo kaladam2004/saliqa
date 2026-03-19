@@ -4,22 +4,26 @@ import {
   BankOutlined, ShopOutlined, BarChartOutlined, HistoryOutlined,
   RightOutlined, InboxOutlined, AppstoreOutlined, EditOutlined, DeleteOutlined,
   PlusOutlined, CheckOutlined, CreditCardOutlined, EnvironmentOutlined,
+  RiseOutlined, UserOutlined,
 } from '@ant-design/icons';
 import ImageUpload from '../../../components/common/ImageUpload';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getWarehouses, createWarehouse, updateWarehouse, deleteWarehouse } from '../../../api/warehouses';
+import { getWarehouses, getWarehouse, createWarehouse, updateWarehouse, deleteWarehouse } from '../../../api/warehouses';
+import { addQuantity } from '../../../api/products';
 import { getShops, createShop, updateShop, deleteShop } from '../../../api/shops';
 import { getEventLogs } from '../../../api/eventLogs';
 import { getExpenses, createExpense, approveExpense } from '../../../api/expenses';
 import { getUserInvoices } from '../../../api/userInvoices';
 import { getPayments } from '../../../api/payments';
+import { getUserPayments } from '../../../api/userPayments';
 import { getUsers } from '../../../api/users';
+import { filterInvoices } from '../../../api/invoices';
 import { formatCurrency, formatDate, formatDateTime } from '../../../utils/helpers';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../../store/authStore';
-import type { Warehouse, Shop, EventLog, Expense, WarehouseRequest, ShopRequest, ExpenseRequest } from '../../../types';
+import type { Warehouse, Shop, EventLog, Expense, WarehouseRequest, ShopRequest, ExpenseRequest, Product } from '../../../types';
 
-type Section = null | 'warehouses' | 'shops' | 'expenses' | 'logs' | 'userInvoices' | 'payments';
+type Section = null | 'warehouses' | 'shops' | 'expenses' | 'logs' | 'userInvoices' | 'payments' | 'analytics' | 'userPayments';
 
 const card = { background: '#fff', borderRadius: 14, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' } as const;
 
@@ -70,6 +74,9 @@ const MoreTab: React.FC = () => {
 
   const [warehouseGpsLoading, setWarehouseGpsLoading] = useState(false);
   const [shopGpsLoading, setShopGpsLoading] = useState(false);
+  const [warehouseDetailId, setWarehouseDetailId] = useState<number | null>(null);
+  const [addQtyProduct, setAddQtyProduct] = useState<Product | null>(null);
+  const [addQtyValue, setAddQtyValue] = useState<number>(0);
 
   const getGps = (form: FormInstance, setLoading: (v: boolean) => void) => {
     setLoading(true);
@@ -83,15 +90,37 @@ const MoreTab: React.FC = () => {
   };
 
   const { data: warehouses = [], isLoading: wLoading } = useQuery({ queryKey: ['warehouses'], queryFn: getWarehouses });
+  const { data: warehouseDetail, isLoading: wdLoading } = useQuery({
+    queryKey: ['warehouse', warehouseDetailId],
+    queryFn: () => getWarehouse(warehouseDetailId!),
+    enabled: !!warehouseDetailId,
+  });
+
+
+  const addQtyMutation = useMutation({
+    mutationFn: ({ id, qty }: { id: number; qty: number }) => addQuantity(id, qty, authUser?.id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['warehouse', warehouseDetailId] });
+      queryClient.invalidateQueries({ queryKey: ['warehouses'] });
+      message.success(t('products.quantity_updated'));
+      setAddQtyProduct(null);
+      setAddQtyValue(0);
+    },
+    onError: () => message.error(t('common.error')),
+  });
   const { data: shops = [], isLoading: sLoading } = useQuery({ queryKey: ['shops'], queryFn: getShops });
   const { data: logs = [], isLoading: lLoading } = useQuery({ queryKey: ['event-logs'], queryFn: getEventLogs });
   const { data: expenses = [], isLoading: eLoading } = useQuery({ queryKey: ['expenses'], queryFn: getExpenses });
   const { data: userInvoices = [], isLoading: uiLoading } = useQuery({ queryKey: ['user-invoices'], queryFn: getUserInvoices });
   const { data: payments = [], isLoading: pLoading } = useQuery({ queryKey: ['payments'], queryFn: getPayments });
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: getUsers });
+  const { data: userPayments = [], isLoading: upLoading } = useQuery({ queryKey: ['user-payments-all'], queryFn: getUserPayments });
+  const { data: allInvoices = [], isLoading: invLoading } = useQuery({ queryKey: ['all-invoices'], queryFn: () => filterInvoices({}) });
 
   const pendingExpenses = expenses.filter(e => !e.approved).length;
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
+  const totalUserPaid = userPayments.reduce((s, p) => s + Number(p.amount), 0);
+  const unpaidInvoices = allInvoices.filter(inv => !inv.paid).length;
 
   // Warehouse mutations
   const createWarehouseMutation = useMutation({
@@ -265,11 +294,13 @@ const MoreTab: React.FC = () => {
         { key: 'warehouses' as Section, icon: <BankOutlined />, label: t('menu.warehouses'), count: warehouses.length, color: '#fa8c16', bg: '#fff7e6' },
         { key: 'shops' as Section, icon: <ShopOutlined />, label: t('menu.shops'), count: shops.length, color: '#13c2c2', bg: '#e6fffb' },
         { key: 'payments' as Section, icon: <CreditCardOutlined />, label: t('menu.payments'), count: undefined, color: '#1677ff', bg: '#e8f4ff' },
+        { key: 'userPayments' as Section, icon: <UserOutlined />, label: t('menu.user_payments'), count: userPayments.filter((p: any) => !p.accepted).length || undefined, color: '#722ed1', bg: '#f9f0ff' },
       ],
     },
     {
       title: t('layout.reports') || 'Ҳисобот',
       items: [
+        { key: 'analytics' as Section, icon: <RiseOutlined />, label: t('menu.analytics'), count: unpaidInvoices > 0 ? unpaidInvoices : undefined, color: '#1677ff', bg: '#e8f4ff' },
         { key: 'userInvoices' as Section, icon: <InboxOutlined />, label: t('menu.user_invoices'), count: userInvoices.length, color: '#722ed1', bg: '#f9f0ff' },
         { key: 'expenses' as Section, icon: <BarChartOutlined />, label: t('menu.my_expenses'), count: pendingExpenses > 0 ? pendingExpenses : undefined, color: '#52c41a', bg: '#f0fff4' },
         { key: 'logs' as Section, icon: <HistoryOutlined />, label: t('menu.event_logs'), count: undefined, color: '#6366f1', bg: '#eef2ff' },
@@ -279,6 +310,73 @@ const MoreTab: React.FC = () => {
 
   const renderContent = () => {
     if (section === 'warehouses') {
+      // Warehouse detail drill-down
+      if (warehouseDetailId) {
+        if (wdLoading) return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
+        const wd = warehouseDetail;
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
+            <button
+              onClick={() => { setWarehouseDetailId(null); setAddQtyProduct(null); }}
+              style={{ display: 'flex', alignItems: 'center', gap: 6, border: 'none', background: 'none', cursor: 'pointer', color: '#1677ff', fontWeight: 600, padding: '4px 0', fontSize: 14 }}
+            >
+              ← {t('common.back')}
+            </button>
+            <div style={{ background: 'linear-gradient(135deg, #fa8c16 0%, #d46b08 100%)', borderRadius: 14, padding: '14px 16px', color: '#fff' }}>
+              <div style={{ fontWeight: 700, fontSize: 16 }}>{wd?.title}</div>
+              {wd?.responsiblePerson && <div style={{ fontSize: 12, opacity: 0.85, marginTop: 2 }}>{t('common.responsible')}: {wd.responsiblePerson}</div>}
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 2 }}>{t('common.products_count', { count: wd?.products?.length ?? 0 })}</div>
+            </div>
+            {/* Add stock quick button */}
+            {addQtyProduct ? (
+              <div style={{ ...card, border: '2px solid #1677ff' }}>
+                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>
+                  {t('products.add_qty_title', { name: addQtyProduct.name })}
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <InputNumber
+                    min={1}
+                    value={addQtyValue}
+                    onChange={v => setAddQtyValue(v ?? 0)}
+                    style={{ flex: 1 }}
+                    placeholder="0"
+                  />
+                  <Button
+                    type="primary"
+                    loading={addQtyMutation.isPending}
+                    onClick={() => { if (addQtyValue > 0) addQtyMutation.mutate({ id: addQtyProduct.id, qty: addQtyValue }); }}
+                  >
+                    <PlusOutlined />
+                  </Button>
+                  <Button onClick={() => { setAddQtyProduct(null); setAddQtyValue(0); }}>✕</Button>
+                </div>
+              </div>
+            ) : null}
+            {(wd?.products ?? []).map((p: Product) => (
+              <div key={p.id} style={{ ...card }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</div>
+                    <div style={{ fontSize: 12, color: p.quantity <= 5 ? '#f5222d' : '#52c41a', fontWeight: 600 }}>
+                      {t('mobile.stock', { count: p.quantity })}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setAddQtyProduct(p); setAddQtyValue(0); }}
+                    style={{ width: 32, height: 32, borderRadius: 8, border: 'none', background: '#e8f4ff', color: '#1677ff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <PlusOutlined style={{ fontSize: 14 }} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {(wd?.products?.length ?? 0) === 0 && (
+              <div style={{ textAlign: 'center', color: '#9ca3af', padding: 24 }}>{t('common.no_data') || 'No products'}</div>
+            )}
+          </div>
+        );
+      }
+
       if (wLoading) return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
       return (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
@@ -295,7 +393,10 @@ const MoreTab: React.FC = () => {
           {warehouses.map((w: Warehouse) => (
             <div key={w.id} style={{ ...card }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <button
+                  onClick={() => setWarehouseDetailId(w.id)}
+                  style={{ flex: 1, minWidth: 0, border: 'none', background: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}
+                >
                   <div style={{ fontWeight: 600, fontSize: 14 }}>{w.title}</div>
                   {w.description && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{w.description}</div>}
                   {w.responsiblePerson && <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>{t('common.responsible')}: {w.responsiblePerson}</div>}
@@ -304,7 +405,7 @@ const MoreTab: React.FC = () => {
                     <AppstoreOutlined style={{ marginRight: 4 }} />
                     {t('common.products_count', { count: w.products?.length ?? 0 })}
                   </div>
-                </div>
+                </button>
                 <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
                   <button
                     onClick={() => openEditWarehouse(w)}
@@ -507,17 +608,115 @@ const MoreTab: React.FC = () => {
       );
     }
 
+    if (section === 'analytics') {
+      if (invLoading || pLoading) return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
+      const totalDebt = allInvoices.filter(inv => !inv.paid).reduce((s, inv) => s + Number(inv.totalPrice), 0);
+      const shopStats = allInvoices.reduce((acc: Record<string, { title: string; total: number; count: number }>, inv) => {
+        const key = String(inv.shop?.id ?? 0);
+        if (!acc[key]) acc[key] = { title: inv.shop?.title ?? '—', total: 0, count: 0 };
+        acc[key].total += Number(inv.totalPrice);
+        acc[key].count += 1;
+        return acc;
+      }, {});
+      const topShops = Object.values(shopStats).sort((a, b) => b.total - a.total).slice(0, 5);
+      const userStats = userInvoices.reduce((acc: Record<string, { name: string; total: number }>, ui: any) => {
+        const key = String(ui.user?.id ?? 0);
+        if (!acc[key]) acc[key] = { name: ui.user?.fullname ?? '—', total: 0 };
+        acc[key].total += Number(ui.totalPrice);
+        return acc;
+      }, {});
+      const topUsers = Object.values(userStats).sort((a: any, b: any) => b.total - a.total).slice(0, 5);
+      const statCard = (label: string, value: string, color: string, bg: string) => (
+        <div style={{ background: bg, borderRadius: 14, padding: '14px 16px', flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 11, color, opacity: 0.8, marginBottom: 4 }}>{label}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color }}>{value}</div>
+        </div>
+      );
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '12px 0' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {statCard(t('menu.invoices'), String(allInvoices.length), '#1677ff', '#e8f4ff')}
+            {statCard(t('common.unpaid'), String(unpaidInvoices), '#fa8c16', '#fff7e6')}
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {statCard(t('common.total_paid'), formatCurrency(totalPaid), '#52c41a', '#f0fff4')}
+            {statCard(t('analytics.debt'), formatCurrency(totalDebt), '#f5222d', '#fff1f0')}
+          </div>
+          <div style={{ ...card }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>🏪 {t('menu.shops')} (Top 5)</div>
+            {topShops.map((s, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: i < topShops.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                <span style={{ fontSize: 13, color: '#374151' }}>{s.title}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#1677ff' }}>{formatCurrency(s.total)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ ...card }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>👤 {t('menu.users')} (Top 5)</div>
+            {topUsers.map((u: any, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: i < topUsers.length - 1 ? '1px solid #f0f0f0' : 'none' }}>
+                <span style={{ fontSize: 13, color: '#374151' }}>{u.name}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: '#722ed1' }}>{formatCurrency(u.total)}</span>
+              </div>
+            ))}
+          </div>
+          <div style={{ ...card }}>
+            <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 4 }}>{t('menu.warehouses')}</div>
+            {warehouses.map((w: Warehouse) => (
+              <div key={w.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <span style={{ fontSize: 13 }}>{w.title}</span>
+                <span style={{ fontSize: 12, color: '#6b7280' }}>{t('common.products_count', { count: w.products?.length ?? 0 })}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (section === 'userPayments') {
+      if (upLoading) return <div style={{ padding: 40, textAlign: 'center' }}><Spin /></div>;
+      const accepted = userPayments.filter(p => p.accepted).length;
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
+          <div style={{ background: 'linear-gradient(135deg, #722ed1 0%, #531dab 100%)', borderRadius: 14, padding: '14px 16px', color: '#fff' }}>
+            <div style={{ fontSize: 11, opacity: 0.8 }}>{t('payments.total_collected')}</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>{formatCurrency(totalUserPaid)}</div>
+            <div style={{ fontSize: 11, opacity: 0.7, marginTop: 2 }}>{userPayments.length} {t('dashboard.transactions')} · {accepted} {t('common.accepted')}</div>
+          </div>
+          {userPayments.slice(0, 50).map((p: any) => (
+            <div key={p.id} style={{ ...card, borderLeft: `3px solid ${p.accepted ? '#52c41a' : '#fa8c16'}` }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 13 }}>{p.user?.fullname ?? p.userFullname ?? '—'}</div>
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{formatDate(p.date)}</div>
+                  <Tag style={{ marginTop: 4, fontSize: 10 }}>{p.paymentMethod}</Tag>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: '#722ed1' }}>{formatCurrency(Number(p.amount))}</div>
+                  <Tag color={p.accepted ? 'green' : 'orange'} style={{ margin: '4px 0 0', fontSize: 10 }}>
+                    {p.accepted ? t('common.accepted') : t('common.pending')}
+                  </Tag>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     return null;
   };
 
   const sectionTitle = () => {
     switch (section) {
-      case 'warehouses': return t('menu.warehouses');
+      case 'warehouses': return warehouseDetailId ? (warehouseDetail?.title ?? t('menu.warehouses')) : t('menu.warehouses');
       case 'shops': return t('menu.shops');
       case 'expenses': return t('menu.my_expenses');
       case 'logs': return t('menu.event_logs');
       case 'userInvoices': return t('menu.user_invoices');
       case 'payments': return t('menu.payments');
+      case 'analytics': return t('menu.analytics');
+      case 'userPayments': return t('menu.user_payments');
       default: return '';
     }
   };
@@ -548,7 +747,7 @@ const MoreTab: React.FC = () => {
       <Modal
         title={sectionTitle()}
         open={!!section}
-        onCancel={() => setSection(null)}
+        onCancel={() => { setSection(null); setWarehouseDetailId(null); setAddQtyProduct(null); }}
         footer={null}
         destroyOnHidden
         styles={{ body: { maxHeight: '70vh', overflowY: 'auto', padding: '0 16px' } }}

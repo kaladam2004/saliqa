@@ -1,8 +1,395 @@
 # WMS — Warehouse Management System
 
-Full-stack warehouse and sales management platform.
-**Frontend**: React 18 + Vite → deploy to **Vercel**
-**Backend**: NestJS + PostgreSQL → deploy to **Railway**
+Системаи идоракунии анбор барои корхонаҳои савдо. Дорои ду нақш: **Admin** ва **User (корманд)**.
+Stack: NestJS + TypeORM + PostgreSQL (backend), React + Ant Design + TanStack Query (frontend).
+
+---
+
+## Мундариҷа
+
+1. [Тарҳи умумӣ](#тарҳи-умумӣ)
+2. [Backend — ҳамаи endpoint-ҳо](#backend)
+3. [Desktop Frontend — Admin](#desktop-admin)
+4. [Desktop Frontend — User](#desktop-user)
+5. [Mobile Admin](#mobile-admin)
+6. [Mobile User](#mobile-user)
+7. [Таҳлили нопурраги](#таҳлили-нопурраги)
+8. [Ран кардан](#ран-кардан)
+
+---
+
+## Тарҳи умумӣ
+
+```
+warehouse-wms-main/
+├── warehouse-backend-node/   # NestJS API (port 8080)
+│   ├── src/
+│   │   ├── auth/             # Login, change-password
+│   │   ├── admin/            # Admin CRUD
+│   │   ├── user/             # User CRUD + GPS
+│   │   ├── warehouse/        # Warehouse CRUD
+│   │   ├── shop/             # Shop CRUD
+│   │   ├── product/          # Product CRUD + stock
+│   │   ├── invoice/          # Накладная (дӯкон → харидор)
+│   │   ├── payment/          # Пардохт аз харидор
+│   │   ├── return/           # Баргашт аз харидор
+│   │   ├── user-invoice/     # Накладная (анбор → корманд)
+│   │   ├── user-payment/     # Пардохт аз корманд
+│   │   ├── user-return/      # Баргашт ба анбор аз корманд
+│   │   ├── expense/          # Харҷ / расмат
+│   │   ├── event-log/        # Лог фаъолиятҳо
+│   │   ├── upload/           # Боргузории акс → /photos/
+│   │   ├── batch/            # Партия (batch) маҳсулот
+│   │   └── template/         # Шаблонҳо
+│   └── photos/               # Аксҳои боргузоришуда (JPEG)
+│
+└── warehouse-ui/             # React SPA (аз backend serve мешавад)
+    └── src/
+        ├── pages/admin/      # Саҳифаҳои Admin (desktop + mobile)
+        └── pages/user/       # Саҳифаҳои User (desktop + mobile)
+```
+
+---
+
+## Backend
+
+> Ҳамаи роутҳо бо `/api` шурӯъ мешаванд. JWT ҳифозат (ба ғайр аз `/auth/login`).
+
+### 🔐 Auth
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| POST | `/auth/login` | Вуруд (username + password) |
+| POST | `/auth/change-password` | Иваз кардани парол |
+
+### 👤 Admin
+| Метод | Роут | Иҷозат |
+|-------|------|--------|
+| GET | `/admins` | SUPER_ADMIN |
+| GET | `/admins/:id` | SUPER_ADMIN |
+| POST | `/admins` | SUPER_ADMIN |
+| PUT | `/admins/:id` | SUPER_ADMIN |
+| DELETE | `/admins/:id` | SUPER_ADMIN |
+| PATCH | `/admins/:id/warehouses` | Таъин кардани анборҳо — SUPER_ADMIN |
+
+### 👥 User (корманд)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/users` | Рӯйхат |
+| GET | `/users/:id` | Аз рӯи ID |
+| POST | `/users` | Эҷод |
+| PUT | `/users/:id` | Навсозӣ |
+| DELETE | `/users/:id` | Ҳазф |
+| PATCH | `/users/:id/gps` | Навсозии GPS |
+
+### 🏭 Warehouse (Анбор)
+| Метод | Роут |
+|-------|------|
+| GET | `/warehouses` — бо маҳсулотҳо |
+| GET | `/warehouses/:id` |
+| POST | `/warehouses` |
+| PUT | `/warehouses/:id` |
+| DELETE | `/warehouses/:id` |
+
+### 🏪 Shop (Дӯкон)
+| Метод | Роут |
+|-------|------|
+| GET | `/shops` |
+| GET | `/shops/:id` |
+| POST | `/shops` |
+| PUT | `/shops/:id` |
+| DELETE | `/shops/:id` |
+
+### 📦 Product (Маҳсулот)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/products` | Рӯйхат |
+| GET | `/products/:id` | Аз рӯи ID |
+| POST | `/products/batch` | Эҷоди якчанд (Admin) |
+| PUT | `/products/:id` | Навсозӣ (Admin) |
+| DELETE | `/products/:id` | Ҳазф (Admin) |
+| POST | `/products/warehouses/:warehouseId/add` | Илова ба анбор |
+| PATCH | `/products/:id/quantity` | Иловаи миқдор |
+
+### 🧾 Invoice (Накладная — дӯкон ↔ харидор)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/invoices` | Ҳамаи накладнаҳо |
+| GET | `/invoices/stats` | Омор |
+| GET | `/invoices/filter` | Филтр: `shopId, userId, from, to` |
+| GET | `/invoices/:id` | Аз рӯи ID |
+| POST | `/invoices` | Эҷод |
+| PUT | `/invoices/:id` | Навсозӣ |
+| PATCH | `/invoices/:id/mark-paid` | Пардохтшуда |
+| PATCH | `/invoices/:id/mark-printed` | Чопшуда |
+| DELETE | `/invoices/:id` | Ҳазф |
+
+### 💰 Payment (Пардохт аз харидор)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/payments` | Ҳамаи пардохтҳо |
+| GET | `/payments/filter` | Филтр: `shopId, userId, from, to` |
+| GET | `/payments/by-user/:userId` | Пардохтҳои корбар |
+| GET | `/payments/:id` | Аз рӯи ID |
+| POST | `/payments` | Эҷод |
+| POST | `/payments/bulk` | Якбора (чанд накладна) |
+| DELETE | `/payments/:id` | Ҳазф |
+
+### 🔄 Return (Баргашт аз харидор)
+| Метод | Роут |
+|-------|------|
+| GET | `/returns` |
+| GET | `/returns/:id` |
+| POST | `/returns` |
+| DELETE | `/returns/:id` |
+
+### 📋 User Invoice (Накладная — анбор → корманд)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/user-invoices` | Ҳамаи |
+| GET | `/user-invoices/filter` | Филтр: `userId, warehouseId, from, to` |
+| GET | `/user-invoices/unpaid/user/:userId` | Пардохтнашудаҳо |
+| GET | `/user-invoices/rep-stock/:userId` | Захираи корманд |
+| GET | `/user-invoices/rep-products/:userId` | Маҳсулоти корманд `(search, page, size)` |
+| GET | `/user-invoices/:id` | Аз рӯи ID |
+| POST | `/user-invoices` | Эҷод |
+| PATCH | `/user-invoices/:id/mark-paid` | Пардохтшуда |
+| PATCH | `/user-invoices/:id/mark-printed` | Чопшуда |
+| DELETE | `/user-invoices/:id` | Ҳазф |
+
+### 💳 User Payment (Пардохт аз корманд ба admin)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/user-payments` | Ҳамаи |
+| GET | `/user-payments/pending` | Дар интизор |
+| GET | `/user-payments/by-user/:userId` | Пардохтҳои корбар |
+| GET | `/user-payments/:id` | Аз рӯи ID |
+| POST | `/user-payments` | Эҷод |
+| POST | `/user-payments/bulk` | Якбора |
+| PATCH | `/user-payments/:id/accept` | Қабул |
+| DELETE | `/user-payments/:id` | Ҳазф |
+
+### ↩️ User Return (Баргашт ба анбор)
+| Метод | Роут |
+|-------|------|
+| GET | `/user-returns` |
+| GET | `/user-returns/:id` |
+| POST | `/user-returns` |
+| DELETE | `/user-returns/:id` |
+
+### 💸 Expense (Харҷ / расмат)
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| GET | `/expenses` | Ҳамаи |
+| GET | `/expenses/filter` | Филтр: `userId, from, to` |
+| GET | `/expenses/by-admin/:adminId` | Харҷҳои admin |
+| GET | `/expenses/by-user/:userId` | Харҷҳои корбар |
+| GET | `/expenses/pending-user` | Тасдиқнашудаҳо |
+| POST | `/expenses` | Эҷод |
+| PATCH | `/expenses/:id/approve` | Тасдиқ |
+| DELETE | `/expenses/:id` | Ҳазф |
+
+### 📜 Event Log
+| Метод | Роут |
+|-------|------|
+| GET | `/event-logs` — login, update, delete логҳо |
+
+### 🖼️ Upload
+| Метод | Роут | Тавсиф |
+|-------|------|--------|
+| POST | `/upload` | Акс → JPEG → нигоҳ дар `./photos/` |
+| GET | `/photos/:file` | Static — нишон додани акс |
+
+> Sharp ҳамаи форматҳо (HEIC, PNG, WEBP) ба JPEG табдил медиҳад. Max 20MB.
+
+### 📦 Batch (Партияи маҳсулот)
+| Метод | Роут |
+|-------|------|
+| GET/POST/PUT/DELETE | `/batches`, `/batches/:id` |
+
+### 📝 Template (Шаблон)
+| Метод | Роут |
+|-------|------|
+| GET/POST/PUT/DELETE | `/templates`, `/templates/:id` |
+
+---
+
+## Desktop Admin
+
+> Роут: `/admin/*` | Desktop ≥ 768px
+
+| Саҳифа | Роут | Вазъ | Тавсиф |
+|--------|------|------|--------|
+| Dashboard | `/admin` | ✅ | Омор умумӣ |
+| Анборҳо | `/admin/warehouses` | ✅ | CRUD + Drawer: маҳсулотҳо + захира |
+| Дӯконҳо | `/admin/shops` | ✅ | CRUD + акс + GPS + корманд |
+| Маҳсулотҳо | `/admin/products` | ✅ | CRUD + акс + нарх |
+| Накладнаҳо | `/admin/invoices` | ✅ | Рӯйхат + детал + чоп A4 + PDF |
+| Пардохтҳо | `/admin/payments` | ✅ | Ҳисобот + филтр + bulk wizard |
+| User Накладнаҳо | `/admin/user-invoices` | ✅ | Накладнаҳои корбарон |
+| User Пардохтҳо | `/admin/user-payments` | ✅ | Пардохтҳои корбарон + қабул |
+| Корбарон | `/admin/users` | ✅ | CRUD + GPS |
+| Adminҳо | `/admin/admins` | ✅ | CRUD (SUPER_ADMIN) |
+| Профил | `/admin/profile` | ✅ | Акс + таҳрир + парол |
+| Аналитика | `/admin/analytics` | ✅ | Графикҳо, қарздориҳо |
+| Логи фаъолиятҳо | `/admin/event-logs` | ✅ | Ҷустуҷӯ + филтр |
+| Харҷи Admin | `/admin/my-expenses` | ✅ | + филтри сана |
+| Харҷи корбарон | `/admin/user-expenses` | ✅ | + тасдиқ |
+| Wizard: Анбор | `/admin/wizard/warehouse` | ✅ | — |
+| Wizard: Маҳсулот | `/admin/wizard/products` | ✅ | — |
+| Wizard: Корбар | `/admin/wizard/user` | ✅ | — |
+| Wizard: Пардохт | `/admin/wizard/accept-payment` | ✅ | — |
+| **Batch** | — | ❌ | Backend мавҷуд, frontend нест |
+| **Template** | — | ❌ | Backend мавҷуд, frontend нест |
+
+---
+
+## Desktop User
+
+> Роут: `/user/*`
+
+| Саҳифа | Роут | Вазъ |
+|--------|------|------|
+| Dashboard | `/user` | ✅ |
+| Профил | `/user/profile` | ✅ |
+| Дӯконҳоям | `/user/shops` | ✅ |
+| Накладнаҳоям | `/user/invoices` | ✅ |
+| Захираҳоям | `/user/my-pickups` | ✅ |
+| Харҷи ман | `/user/my-expenses` | ✅ |
+| Wizard: Фурӯш | `/user/wizard/sales` | ✅ |
+| Wizard: Пардохт | `/user/wizard/payment` | ✅ |
+| Wizard: Bulk пардохт | `/user/wizard/bulk-payment` | ✅ |
+| Wizard: Баргашт | `/user/wizard/return` | ✅ |
+| Wizard: Гирифтан аз анбор | `/user/wizard/pickup` | ✅ |
+
+---
+
+## Mobile Admin
+
+> < 768px | **6 таб** дар поён
+
+| Таб | Вазъ | Мундариҷа |
+|-----|------|-----------|
+| 🏠 Dashboard | ✅ | Омор: накладнаҳо, пардохтҳо, корбарон |
+| 📦 Маҳсулот | ✅ | CRUD + детали маҳсулот |
+| 📄 Накладна | ✅ | Рӯйхат + детал + **чоп A4** + пардохт |
+| 👥 Корбарон | ✅ | CRUD + GPS |
+| ⋯ Бештар | ✅ | Анборҳо, Дӯконҳо, Пардохтҳо, Аналитика, Харҷот, Логҳо, User Накладнаҳо, User Пардохтҳо |
+| 👤 Профил | ✅ | Акс + таҳрир + парол |
+
+**"Бештар" дар мобайл:**
+
+| Бахш | Вазъ | Эзоҳ |
+|------|------|------|
+| Анборҳо | ✅ | CRUD (бе детали маҳсулотҳо) |
+| Дӯконҳо | ✅ | CRUD |
+| Пардохтҳо | ✅ | Рӯйхат |
+| User Накладнаҳо | ✅ | Рӯйхат |
+| User Пардохтҳо | ✅ | + қабул |
+| Аналитика | ✅ | Омор + графики дӯконҳо |
+| Харҷоти Admin | ✅ | Рӯйхат + эҷод |
+| Логи фаъолиятҳо | ✅ | Рӯйхат |
+| Детали анбор (Drawer + захира) | ❌ | Дар desktop ҳаст, мобайл нест |
+| Харҷи корбарон + тасдиқ | ❌ | Дар desktop ҳаст, мобайл нест |
+| Wizard-ҳо (setup/onboard) | ❌ | Мобайл нест |
+
+---
+
+## Mobile User
+
+> < 768px | **4 таб** дар поён
+
+| Таб | Вазъ | Мундариҷа |
+|-----|------|-----------|
+| 🏠 Dashboard | ✅ | Қарзҳо, пардохтҳо |
+| 🏪 Дӯконҳо | ✅ | Рӯйхат → детал → Накладнаҳо / Пардохтҳо / Баргаштҳо |
+| 📥 Анбор | ✅ | Маҳсулот / Гирифтаҳо / Пардохтҳо / Харҷот / Баргаштҳо |
+| 👤 Профил | ✅ | Акс + GPS + таҳрир + парол |
+
+**"Дӯконҳо" таб:**
+
+| Бахш | Вазъ |
+|------|------|
+| Рӯйхат + ҷустуҷӯ + recent | ✅ |
+| GPS + тел дар детал | ✅ |
+| Накладнаҳо — рӯйхат + **чоп A4** + QR scan | ✅ |
+| Эҷоди накладна (wizard) | ✅ |
+| Пардохтҳо — рӯйхат | ✅ |
+| Баргаштҳо — рӯйхат + wizard | ✅ |
+| Bulk пардохт | ❌ | Desktop-да ҳаст |
+
+**"Анбор" таб:**
+
+| Бахш | Вазъ |
+|------|------|
+| Маҳсулотҳо + гирифтан аз анбор | ✅ |
+| Гирифтаҳоям + **чоп A4** + QR | ✅ |
+| Пардохтҳо ба admin | ✅ |
+| Харҷот + эҷод | ✅ |
+| Баргашт ба анбор (wizard) | ✅ |
+
+---
+
+## Таҳлили нопурраги
+
+### 🔴 Backend дорад — Frontend НЕСТ:
+| Модул | Тавсиф |
+|-------|--------|
+| `/batches` | Партияи маҳсулот — бекенд тайёр, UI нест |
+| `/templates` | Шаблонҳо — бекенд тайёр, UI нест |
+
+### 🟡 Desktop дорад — Mobile НЕСТ:
+| Функсия | Admin Mobile | User Mobile |
+|---------|-------------|-------------|
+| Детали анбор + иловаи захира | ❌ | — |
+| Харҷи корбарон (тасдиқ) | ❌ | — |
+| Wizard-ҳо (setup/onboard) | ❌ | — |
+| Bulk пардохт | — | ❌ |
+
+### 🟢 Ҳама ҷо кор мекунад:
+| Функсия | Desktop | Mobile |
+|---------|---------|--------|
+| Вуруд + парол | ✅ | ✅ |
+| Профил бо акс + GPS | ✅ | ✅ |
+| CRUD: анбор, дӯкон, маҳсулот | ✅ | ✅ |
+| Накладна — эҷод + чоп A4 | ✅ | ✅ |
+| Пардохт + баргашт | ✅ | ✅ |
+| Боргузории акс (HEIC/PNG→JPEG) | ✅ | ✅ |
+| 3 забон (тоҷ/рус/инг) | ✅ | ✅ |
+| Аналитика + логҳо | ✅ | ✅ |
+| QR код | ✅ | ✅ |
+
+---
+
+## Схемаи ҷараёни маҳсулот
+
+```
+АНБОР ──[user-invoice]──► КОРМАНД ──[invoice]──► ХАРИДОР
+  ▲                           │                       │
+  │                      [user-return]            [payment]
+  │                           │
+  └───────────────────────────┘
+
+Ҳисоббаробаркунӣ: КОРМАНД ──[user-payment]──► ADMIN
+```
+
+---
+
+## Ран кардан
+
+```bash
+# Сервер (build аллакай тайёр аст)
+cd "/Users/hikmatullo/Downloads/warehouse-wms-main 2/warehouse-backend-node"
+node dist/main.js
+
+# Пас аз тағйири код
+cd ".../warehouse-ui" && npm run build
+cd ".../warehouse-backend-node" && npm run build && node dist/main.js
+
+# Ngrok (дастрасӣ аз интернет)
+ngrok http 8080
+```
+
+**Портҳо:** `localhost:8080` — frontend + API + аксҳо (`/photos/`)
 
 Multi-language UI: English / Русский / Тоҷикӣ
 

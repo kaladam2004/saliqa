@@ -7,7 +7,8 @@
     "dev:api": "cd warehouse-backend-node && npm run start:dev",
     "dev:ui": "cd warehouse-ui && npm run dev",
     "install:all": "npm install --prefix warehouse-backend-node && npm install --prefix warehouse-ui",
-    "build": "npm run build --prefix warehouse-backend-node && npm run build --prefix warehouse-ui"
+    "build": "npm install --prefix warehouse-ui && npm run build --prefix warehouse-ui && npm install --prefix warehouse-backend-node && npm run build --prefix warehouse-backend-node",
+    "start": "node warehouse-backend-node/dist/main.js"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

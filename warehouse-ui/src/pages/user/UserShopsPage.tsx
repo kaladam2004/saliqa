@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { Table, Modal, Form, Input, Button, Space, message } from 'antd';
-import { EditOutlined } from '@ant-design/icons';
+import { EditOutlined, EnvironmentOutlined } from '@ant-design/icons';
+
+const openMap = (gps?: string | null) => {
+  if (gps) window.open(`https://www.google.com/maps?q=${gps}`, '_blank', 'noopener,noreferrer');
+};
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getShops, createShop, updateShop, deleteShop } from '../../api/shops';
 import type { Shop, ShopRequest } from '../../types';
@@ -50,7 +54,12 @@ const UserShopsPage: React.FC = () => {
     },
     { title: t('common.title'), dataIndex: 'title' },
     { title: t('common.tel'), dataIndex: 'tel' },
-    { title: t('common.gps'), dataIndex: 'gps' },
+    {
+      title: t('common.gps'), key: 'gps',
+      render: (_: unknown, r: Shop) => r.gps
+        ? <Button size="small" icon={<EnvironmentOutlined />} onClick={() => openMap(r.gps)}>{t('profile.open_map')}</Button>
+        : '—',
+    },
     {
       title: t('common.actions'), key: 'actions', width: 100,
       render: (_: unknown, r: Shop) => (

@@ -20,7 +20,8 @@ import type {
   ExpenseRequest, UserInvoice, UserReturnRequest, Warehouse,
 } from '../../../types';
 import { formatCurrency } from '../../../utils/helpers';
-import InvoicePrintModal, { type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
+import { type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
+import { mobilePrintInvoice } from '../../../utils/mobilePrint';
 import QRScannerModal, { type QRVerifyTarget } from '../../../components/common/QRScannerModal';
 
 const { Text } = Typography;
@@ -216,7 +217,6 @@ const PickupsSection: React.FC = () => {
   const [warehouseFilter, setWarehouseFilter] = useState<number | undefined>();
   const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'unprinted'>('all');
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [printData, setPrintData] = useState<PrintInvoiceData | null>(null);
   const [scanTarget, setScanTarget] = useState<QRVerifyTarget | null>(null);
 
   const { data: pickups = [], isLoading } = useQuery({
@@ -308,7 +308,7 @@ const PickupsSection: React.FC = () => {
                     </>
                   )}
                   <Space style={{ marginTop: 8 }} wrap>
-                    <Button size="small" icon={<PrinterOutlined />} onClick={() => setPrintData(toPrint(inv))}>{t('invoices.print')}</Button>
+                    <Button size="small" icon={<PrinterOutlined />} onClick={() => mobilePrintInvoice(toPrint(inv))}>{t('invoices.print')}</Button>
                     {!inv.printed && (
                       <Button size="small" icon={<ScanOutlined />} onClick={() => setScanTarget({
                         type: 'uinv', id: inv.id, warehouseId: inv.warehouse.id, userId: inv.user.id, total: inv.totalPrice,
@@ -322,7 +322,6 @@ const PickupsSection: React.FC = () => {
         })}
       </div>
 
-      <InvoicePrintModal open={!!printData} data={printData} onClose={() => setPrintData(null)} />
       <QRScannerModal open={!!scanTarget} target={scanTarget}
         onVerified={() => scanTarget && markPrinted.mutate(scanTarget.id)}
         onClose={() => setScanTarget(null)} />

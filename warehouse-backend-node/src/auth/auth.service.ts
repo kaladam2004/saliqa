@@ -14,6 +14,13 @@ export class LoginDto {
   @IsString() password: string;
 }
 
+export class ChangePasswordDto {
+  id: number;
+  role: string;
+  oldPassword: string;
+  newPassword: string;
+}
+
 @Injectable()
 export class AuthService {
   constructor(
@@ -69,6 +76,29 @@ export class AuthService {
     }
 
     throw new BadRequestException('Invalid credentials');
+  }
+
+  async changePassword(dto: ChangePasswordDto) {
+    if (dto.role === 'USER') {
+      const user = await this.userRepo.findOne({ where: { id: dto.id, deleted: false } });
+      if (!user) throw new BadRequestException('User not found');
+      if (!(await bcrypt.compare(dto.oldPassword, user.password))) {
+        throw new BadRequestException('Old password is incorrect');
+      }
+      user.password = await bcrypt.hash(dto.newPassword, 10);
+      await this.userRepo.save(user);
+      await this.eventLogService.log(user.id, 'USER', user.username, EventType.UPDATE, 'Password changed');
+    } else {
+      const admin = await this.adminRepo.findOne({ where: { id: dto.id, deleted: false } });
+      if (!admin) throw new BadRequestException('Admin not found');
+      if (!(await bcrypt.compare(dto.oldPassword, admin.password))) {
+        throw new BadRequestException('Old password is incorrect');
+      }
+      admin.password = await bcrypt.hash(dto.newPassword, 10);
+      await this.adminRepo.save(admin);
+      await this.eventLogService.log(admin.id, 'ADMIN', admin.username, EventType.UPDATE, 'Password changed');
+    }
+    return { success: true };
   }
 
   private generateToken(username: string, role: string, id: number): string {

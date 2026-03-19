@@ -57,14 +57,16 @@ export class PaymentService {
       .map(p => this.toResponse(p));
   }
 
-  async filter(shopId?: number, from?: Date, to?: Date) {
+  async filter(shopId?: number, from?: Date, to?: Date, userId?: number) {
     const qb = this.paymentRepo.createQueryBuilder('p')
       .leftJoinAndSelect('p.invoice', 'invoice')
+      .leftJoinAndSelect('invoice.user', 'invoiceUser')
       .leftJoinAndSelect('p.shop', 'shop')
       .where('p.deleted = false');
     if (shopId) qb.andWhere('p.shop_id = :shopId', { shopId });
     if (from) qb.andWhere('p.paid_at >= :from', { from });
     if (to) qb.andWhere('p.paid_at <= :to', { to });
+    if (userId) qb.andWhere('invoiceUser.id = :userId', { userId });
     const payments = await qb.getMany();
     return payments.map(p => this.toResponse(p));
   }

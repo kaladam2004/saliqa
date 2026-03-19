@@ -13,9 +13,9 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   // CORS
-  const origins = (process.env.CORS_ORIGINS || 'http://localhost:5173,http://localhost:3000').split(',');
+  const corsOrigins = process.env.CORS_ORIGINS;
   app.enableCors({
-    origin: origins,
+    origin: corsOrigins ? corsOrigins.split(',') : true,
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     allowedHeaders: 'Content-Type,Authorization',
   });
@@ -23,10 +23,27 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('api');
 
-  // Serve uploads folder
-  const uploadDir = process.env.UPLOAD_DIR || './uploads';
+  // Serve photos folder
+  const uploadDir = process.env.UPLOAD_DIR || './photos';
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-  app.useStaticAssets(path.resolve(uploadDir), { prefix: '/uploads' });
+  app.useStaticAssets(path.resolve(uploadDir), { prefix: '/photos' });
+  // Backward-compat: also serve old /uploads path if it exists
+  const legacyUploads = './uploads';
+  if (fs.existsSync(legacyUploads)) {
+    app.useStaticAssets(path.resolve(legacyUploads), { prefix: '/uploads' });
+  }
+
+  // Serve frontend (warehouse-ui/dist) on same port
+  const frontendDist = path.resolve(__dirname, '../../warehouse-ui/dist');
+  if (fs.existsSync(frontendDist)) {
+    app.useStaticAssets(frontendDist);
+    // SPA fallback — serve index.html for all non-api/non-uploads routes
+    const expressApp = app.getHttpAdapter().getInstance();
+    expressApp.get(/^(?!\/api|\/uploads|\/photos).*/, (_req: any, res: any) => {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+    console.log(`🌐 Frontend served from ${frontendDist}`);
+  }
 
   // Global validation pipe
   app.useGlobalPipes(new ValidationPipe({ whitelist: false, transform: true }));

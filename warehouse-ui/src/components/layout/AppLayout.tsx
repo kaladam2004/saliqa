@@ -41,6 +41,7 @@ const AppLayout: React.FC = () => {
 
   const adminMenuItems = [
     { key: '/admin', icon: <DashboardOutlined />, label: t('menu.dashboard') },
+    { key: '/admin/profile', icon: <UserOutlined />, label: t('menu.profile') },
     { type: 'divider' },
     { type: 'group', label: t('layout.quick_setup'), children: [
       { key: '/admin/wizard/warehouse', icon: <ThunderboltOutlined />, label: t('menu.setup_warehouse') },
@@ -58,6 +59,7 @@ const AppLayout: React.FC = () => {
     ]},
     { type: 'divider' },
     { type: 'group', label: t('layout.reports'), children: [
+      { key: '/admin/analytics', icon: <BarChartOutlined />, label: t('menu.analytics') },
       { key: '/admin/invoices', icon: <FileTextOutlined />, label: t('menu.invoices') },
       { key: '/admin/payments', icon: <DollarOutlined />, label: t('menu.payments') },
       { key: '/admin/user-invoices', icon: <InboxOutlined />, label: t('menu.user_invoices') },
@@ -65,6 +67,11 @@ const AppLayout: React.FC = () => {
       { key: '/admin/my-expenses', icon: <BarChartOutlined />, label: t('menu.my_expenses') },
       { key: '/admin/user-expenses', icon: <BarChartOutlined />, label: t('menu.user_expenses_approval') },
       { key: '/admin/event-logs', icon: <HistoryOutlined />, label: t('menu.event_logs') },
+    ]},
+    { type: 'divider' },
+    { type: 'group', label: t('layout.catalog'), children: [
+      { key: '/admin/batches', icon: <InboxOutlined />, label: t('menu.batches') },
+      { key: '/admin/templates', icon: <FileTextOutlined />, label: t('menu.templates') },
     ]},
   ];
 

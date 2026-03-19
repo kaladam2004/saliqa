@@ -1,25 +1,26 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  Button, Divider, Empty, Input, InputNumber, message,
-  Modal, Select, Space, Spin, Steps, Tag, Typography,
+  Button, Empty, Input, InputNumber, message,
+  Modal, Select, Space, Steps, Tag, Typography,
 } from 'antd';
 import {
   ArrowLeftOutlined, DollarOutlined, EnvironmentOutlined,
   MinusOutlined, PhoneOutlined, PlusOutlined, PrinterOutlined,
-  RollbackOutlined, ScanOutlined, SearchOutlined,
+  RollbackOutlined, ScanOutlined, SearchOutlined, ShopOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '../../../store/authStore';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 import { filterInvoices, createInvoice, markInvoicePrinted } from '../../../api/invoices';
-import { getPaymentsByUser, createPayment } from '../../../api/payments';
+import { getPaymentsByUser, createPayment, bulkCollectPayment } from '../../../api/payments';
 import { getReturns, createReturn } from '../../../api/returns';
 import { getRepProducts } from '../../../api/userInvoices';
 import { getShops } from '../../../api/shops';
-import type { Invoice, Product, ReturnProductItem, Shop, PaymentMethod } from '../../../types';
-import { formatCurrency, formatDate } from '../../../utils/helpers';
-import { buildQrPayload, type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
+import type { Invoice, Shop, PaymentMethod } from '../../../types';
+import { formatCurrency } from '../../../utils/helpers';
+import { type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
+import { mobilePrintInvoice } from '../../../utils/mobilePrint';
 import QRScannerModal, { type QRVerifyTarget } from '../../../components/common/QRScannerModal';
 
 const { Text } = Typography;
@@ -45,150 +46,80 @@ const card = {
 const imgSrc = (url?: string | null) =>
   !url ? null : url.startsWith('http') ? url : '/api' + url;
 
-/* ─── Print helper (works on mobile too) ─── */
-const printInvoice = (data: PrintInvoiceData) => {
-  const qr = buildQrPayload(data);
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Invoice #${data.id}</title>
-<style>
-  body{font-family:Arial,sans-serif;padding:24px;max-width:600px;margin:0 auto}
-  h2{margin:0 0 4px}
-  .meta{color:#666;font-size:13px;margin-bottom:16px}
-  table{width:100%;border-collapse:collapse;margin:12px 0}
-  th,td{border:1px solid #ddd;padding:7px 10px;font-size:13px;text-align:left}
-  th{background:#f5f5f5;font-weight:600}
-  .total{text-align:right;font-weight:700;font-size:15px;margin-top:8px}
-  .sigs{display:flex;justify-content:space-between;margin-top:48px}
-  .sig{border-top:1px solid #000;width:180px;padding-top:4px;font-size:12px;text-align:center}
-  .qr{float:right}
-  .print-btn{display:block;margin:0 auto 16px;padding:12px 32px;background:#1677ff;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
-  @media print{.print-btn{display:none}body{padding:0}}
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨 Print</button>
-<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qr)}" width="100" height="100"/></div>
-<h2>Invoice #${data.id}</h2>
-<div class="meta">${dayjs(data.date).format('DD.MM.YYYY HH:mm')}</div>
-<div>${data.shopTitle ? `<b>Shop:</b> ${data.shopTitle}` : `<b>Warehouse:</b> ${data.warehouseTitle ?? ''}`}</div>
-<div><b>Rep:</b> ${data.userFullname}</div>
-${data.notes ? `<div><b>Notes:</b> ${data.notes}</div>` : ''}
-<table>
-  <tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr>
-  ${data.products.map(p => `<tr><td>${p.productName}</td><td>${p.quantity}</td><td>${formatCurrency(p.unitPrice)}</td><td>${formatCurrency(p.totalPrice ?? p.unitPrice * p.quantity)}</td></tr>`).join('')}
-</table>
-<div class="total">Total: ${formatCurrency(data.totalPrice)}</div>
-<div class="sigs"><div class="sig">Sales Rep</div><div class="sig">Signature</div></div>
-<script>window.onload=function(){try{window.print();}catch(e){}}</script>
-</body></html>`;
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-};
+type ShopTab = 'invoices' | 'payments' | 'returns';
+type InvFilter = 'all' | 'unpaid' | 'unprinted';
 
-/* ─── Payment Modal ─── */
-interface PaymentModalProps {
+/* ══════════════════════════════════════
+   PAYMENT MODAL
+══════════════════════════════════════ */
+const PaymentModal: React.FC<{
   open: boolean;
   invoice: Invoice | null;
-  shop: Shop;
   onClose: () => void;
   onSuccess: () => void;
-}
-
-const PaymentModal: React.FC<PaymentModalProps> = ({ open, invoice, shop, onClose, onSuccess }) => {
+}> = ({ open, invoice, onClose, onSuccess }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
-  const [amount, setAmount] = useState<number | null>(null);
+  const [amount, setAmount] = useState<number>(0);
   const [method, setMethod] = useState<PaymentMethod>('CASH');
-
-  const remaining = invoice
-    ? Math.max(0, Number(invoice.totalPrice) - invoice.payments.reduce((s, p) => s + Number(p.amount), 0))
-    : 0;
+  const [desc, setDesc] = useState('');
 
   const mutation = useMutation({
     mutationFn: createPayment,
     onSuccess: () => {
-      message.success(t('payments.payment_recorded'));
-      setAmount(null);
-      setMethod('CASH');
+      message.success(t('payments.payment_created'));
       onSuccess();
       onClose();
+      setAmount(0); setDesc('');
     },
     onError: () => message.error(t('common.error')),
   });
 
-  const handleSubmit = () => {
-    if (!invoice || !amount || amount <= 0) return;
-    mutation.mutate({ invoiceId: invoice.id, shopId: shop.id, amount, paymentMethod: method });
-  };
-
-  const methodOptions: { value: PaymentMethod; label: string }[] = [
-    { value: 'CASH', label: t('payments.method_cash') },
-    { value: 'CARD', label: t('payments.method_card') },
-    { value: 'BANK_TRANSFER', label: t('payments.method_bank') },
-    { value: 'OTHER', label: t('payments.method_other') },
-  ];
-
   return (
     <Modal
+      title={`${t('payments.record_payment')} — #${invoice?.id}`}
       open={open}
-      title={`${t('payments.record_payment')} — ${t('mobile.invoice_of')} #${invoice?.id}`}
       onCancel={onClose}
       footer={null}
       destroyOnHidden
     >
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '8px 0' }}>
-        <div style={{ background: '#fff7e6', borderRadius: 10, padding: '10px 14px', borderLeft: '4px solid #fa8c16' }}>
-          <Text type="secondary" style={{ fontSize: 12 }}>{t('payments.no_payments')} / {t('common.total')}</Text>
-          <div style={{ fontWeight: 700, fontSize: 18, color: '#fa8c16' }}>{formatCurrency(remaining)}</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: '#f8faff', borderRadius: 10, padding: '10px 14px' }}>
+          <Text type="secondary" style={{ fontSize: 12 }}>{t('invoices.total')}</Text>
+          <div><Text strong style={{ fontSize: 18, color: '#1677ff' }}>{formatCurrency(invoice?.totalPrice ?? 0)}</Text></div>
         </div>
-
-        <div>
-          <Text strong style={{ display: 'block', marginBottom: 6 }}>{t('common.amount')}:</Text>
-          <InputNumber
-            style={{ width: '100%' }}
-            size="large"
-            min={0.01}
-            max={remaining}
-            value={amount}
-            onChange={v => setAmount(v)}
-            formatter={v => v ? String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ' ') : ''}
-            placeholder="0"
-            addonAfter="TJS"
-          />
-          <Button
-            size="small"
-            type="link"
-            style={{ padding: 0, marginTop: 4 }}
-            onClick={() => setAmount(remaining)}
-          >
-            {t('payments.total_collected')}: {formatCurrency(remaining)}
-          </Button>
-        </div>
-
-        <div>
-          <Text strong style={{ display: 'block', marginBottom: 6 }}>{t('payments.method')}:</Text>
-          <Select
-            style={{ width: '100%' }}
-            size="large"
-            value={method}
-            onChange={v => setMethod(v)}
-            options={methodOptions}
-          />
-        </div>
-
+        <InputNumber
+          placeholder={t('common.amount')}
+          style={{ width: '100%' }}
+          value={amount || undefined}
+          onChange={v => setAmount(v ?? 0)}
+          min={0}
+        />
+        <Select value={method} onChange={v => setMethod(v as PaymentMethod)} style={{ width: '100%' }}>
+          <Select.Option value="CASH">{t('payments.cash')}</Select.Option>
+          <Select.Option value="CARD">{t('payments.card')}</Select.Option>
+          <Select.Option value="TRANSFER">{t('payments.transfer')}</Select.Option>
+        </Select>
+        <Input.TextArea
+          rows={2}
+          placeholder={t('common.description')}
+          value={desc}
+          onChange={e => setDesc(e.target.value)}
+        />
         <Button
-          type="primary"
-          size="large"
-          block
-          icon={<DollarOutlined />}
+          type="primary" block size="large"
           loading={mutation.isPending}
           disabled={!amount || amount <= 0}
-          onClick={handleSubmit}
-          style={{ marginTop: 4 }}
+          onClick={() => {
+            if (!invoice || !user) return;
+            mutation.mutate({
+              invoiceId: invoice.id,
+              userId: user.id,
+              amount,
+              paymentMethod: method,
+              description: desc || undefined,
+            } as any);
+          }}
         >
           {t('payments.record_payment')}
         </Button>
@@ -197,662 +128,405 @@ const PaymentModal: React.FC<PaymentModalProps> = ({ open, invoice, shop, onClos
   );
 };
 
-/* ─── Shop detail sub-tabs ─── */
-type ShopSubTab = 'invoices' | 'payments' | 'returns';
-
 /* ══════════════════════════════════════
-   INVOICE WIZARD MODAL
+   CREATE INVOICE WIZARD
 ══════════════════════════════════════ */
-interface InvoiceWizardProps {
+const CreateInvoiceModal: React.FC<{
   open: boolean;
   shop: Shop;
-  userId: number;
   onClose: () => void;
-}
-
-const InvoiceWizardModal: React.FC<InvoiceWizardProps> = ({ open, shop, userId, onClose }) => {
+  onSuccess: () => void;
+}> = ({ open, shop, onClose, onSuccess }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
-  const qc = useQueryClient();
+  const [step, setStep] = useState(0);
   const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState<Set<number>>(new Set());
   const [qtys, setQtys] = useState<Record<number, number>>({});
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [notes, setNotes] = useState('');
 
-  const handleSearchChange = useCallback((val: string) => {
-    setSearch(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
-  }, []);
-
-  const { data: productPage, isLoading } = useQuery({
-    queryKey: ['rep-products-wizard', userId],
-    queryFn: () => getRepProducts(userId, '', 0, 100),
-    enabled: open && !!userId,
+  const { data: productPage } = useQuery({
+    queryKey: ['rep-products', user?.id, search],
+    queryFn: () => getRepProducts(user!.id, search, 0, 50),
+    enabled: !!user?.id && open,
   });
 
-  const allProducts: Product[] = productPage?.content ?? [];
-  const filtered = useMemo(() =>
-    debouncedSearch
-      ? allProducts.filter(p => p.name.toLowerCase().includes(debouncedSearch.toLowerCase()))
-      : allProducts,
-    [allProducts, debouncedSearch],
-  );
+  const products = productPage?.content ?? [];
 
-  const totalAmount = useMemo(() =>
-    Object.entries(qtys).reduce((sum, [id, qty]) => {
-      const p = allProducts.find(x => x.id === Number(id));
-      return p ? sum + (p.price as unknown as number) * qty : sum;
-    }, 0),
-    [qtys, allProducts],
-  );
-
-  const hasItems = Object.values(qtys).some(q => q > 0);
-
-  const createMutation = useMutation({
+  const mutation = useMutation({
     mutationFn: createInvoice,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['my-invoices', userId] });
       message.success(t('invoices.invoice_created'));
-      setSearch('');
-      setQtys({});
+      onSuccess();
       onClose();
+      setStep(0); setSelected(new Set()); setQtys({}); setNotes('');
     },
     onError: () => message.error(t('common.error')),
   });
 
-  const handleSubmit = () => {
-    const products = Object.entries(qtys)
-      .filter(([, qty]) => qty > 0)
-      .map(([id, qty]) => {
-        const p = allProducts.find(x => x.id === Number(id))!;
-        return { productId: Number(id), quantity: qty, unitPrice: p.price as unknown as number };
-      });
-    if (!products.length) { message.warning(t('mobile.no_items_selected')); return; }
-    createMutation.mutate({ shopId: shop.id, userId, free: false, products });
-  };
+  const orderItems = useMemo(() =>
+    Array.from(selected).map(id => ({ product: products.find(p => p.id === id)!, qty: qtys[id] ?? 1 })).filter(i => i.product),
+    [selected, products, qtys]
+  );
 
-  const handleClose = () => {
-    setSearch('');
-    setDebouncedSearch('');
-    setQtys({});
-    onClose();
+  const total = orderItems.reduce((s, i) => s + Number(i.product.price) * i.qty, 0);
+
+  const toggle = (id: number) => setSelected(prev => {
+    const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n;
+  });
+
+  const handleSubmit = () => {
+    if (!user) return;
+    mutation.mutate({
+      shopId: shop.id,
+      userId: user.id,
+      notes,
+      products: orderItems.map(i => ({ productId: i.product.id, quantity: i.qty })),
+    } as any);
   };
 
   return (
     <Modal
+      title={t('invoices.create_invoice')}
       open={open}
-      title={t('mobile.create_invoice_for', { shop: shop.title })}
-      onCancel={handleClose}
+      onCancel={() => { onClose(); setStep(0); setSelected(new Set()); setQtys({}); }}
       footer={null}
       destroyOnHidden
-      styles={{ body: { padding: 0 } }}
     >
-      <div style={{ display: 'flex', flexDirection: 'column', maxHeight: '70vh' }}>
-        {/* Search */}
-        <div style={{ padding: '12px 16px 8px' }}>
+      <Steps current={step} size="small" style={{ marginBottom: 16 }} items={[
+        { title: t('menu.products') },
+        { title: t('common.confirm') },
+      ]} />
+
+      {step === 0 && (
+        <>
           <Input
             prefix={<SearchOutlined />}
             placeholder={t('mobile.search_products')}
             value={search}
-            onChange={e => handleSearchChange(e.target.value)}
+            onChange={e => setSearch(e.target.value)}
+            style={{ marginBottom: 10 }}
             allowClear
-            onClear={() => handleSearchChange('')}
           />
-        </div>
-
-        {/* Product grid */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 12px 8px' }}>
-          {isLoading && (
-            <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
-          )}
-          {!isLoading && filtered.length === 0 && (
-            <Empty description={t('mobile.no_products')} style={{ padding: '24px 0' }} />
-          )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {filtered.map(p => {
-              const qty = qtys[p.id] ?? 0;
-              const selected = qty > 0;
+          <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {products.length === 0 && <Empty description={t('mobile.no_products')} />}
+            {products.map(p => {
+              const isSel = selected.has(p.id);
               return (
-                <div
-                  key={p.id}
-                  style={{
-                    background: '#fff',
-                    borderRadius: 12,
-                    border: `2px solid ${selected ? '#1677ff' : '#e8e8e8'}`,
-                    boxShadow: selected
-                      ? '0 0 0 2px rgba(22,119,255,0.15), 0 4px 12px rgba(22,119,255,0.1)'
-                      : '0 2px 6px rgba(0,0,0,0.04)',
-                    padding: 10,
-                    position: 'relative',
-                    transition: 'border-color 0.2s, box-shadow 0.2s',
-                  }}
-                >
-                  {/* Selection badge */}
-                  {selected && (
-                    <div style={{
-                      position: 'absolute', top: 6, right: 6,
-                      background: '#1677ff', color: '#fff',
-                      borderRadius: 10, fontSize: 10, fontWeight: 700,
-                      padding: '1px 6px', lineHeight: '16px',
-                    }}>
-                      {qty}
-                    </div>
+                <div key={p.id} onClick={() => toggle(p.id)} style={{
+                  background: isSel ? '#f0f4ff' : '#fafafa',
+                  border: `2px solid ${isSel ? '#1677ff' : 'transparent'}`,
+                  borderRadius: 10, padding: 10, cursor: 'pointer',
+                  display: 'flex', alignItems: 'center', gap: 10,
+                }}>
+                  {p.image
+                    ? <img src={imgSrc(p.image)!} alt={p.name} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                    : <div style={{ width: 40, height: 40, background: '#e0e7ff', borderRadius: 6, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>📦</div>}
+                  <div style={{ flex: 1 }}>
+                    <Text strong style={{ fontSize: 13 }}>{p.name}</Text>
+                    <div><Text style={{ color: '#1677ff', fontSize: 12 }}>{formatCurrency(Number(p.price))}</Text></div>
+                  </div>
+                  {isSel && (
+                    <Space onClick={e => e.stopPropagation()}>
+                      <Button size="small" icon={<MinusOutlined />} onClick={() => setQtys(q => ({ ...q, [p.id]: Math.max(1, (q[p.id] ?? 1) - 1) }))} />
+                      <Text strong style={{ minWidth: 20, textAlign: 'center' }}>{qtys[p.id] ?? 1}</Text>
+                      <Button size="small" icon={<PlusOutlined />} onClick={() => setQtys(q => ({ ...q, [p.id]: (q[p.id] ?? 1) + 1 }))} />
+                    </Space>
                   )}
-
-                  {/* Image */}
-                  <div style={{ textAlign: 'center', marginBottom: 6 }}>
-                    {imgSrc(p.image)
-                      ? <img
-                          src={imgSrc(p.image)!}
-                          alt={p.name}
-                          style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 8 }}
-                        />
-                      : <div style={{
-                          width: 64, height: 64, background: '#f5f7fa', borderRadius: 8,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          fontSize: 28, margin: '0 auto',
-                        }}>📦</div>
-                    }
-                  </div>
-
-                  {/* Name */}
-                  <Text
-                    strong
-                    style={{
-                      fontSize: 12, display: 'block', textAlign: 'center',
-                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {p.name}
-                  </Text>
-
-                  {/* Price */}
-                  <Text style={{ color: '#1677ff', fontSize: 12, fontWeight: 600, display: 'block', textAlign: 'center', marginTop: 2 }}>
-                    {formatCurrency(p.price as unknown as number)}
-                  </Text>
-
-                  {/* Stock */}
-                  <Text type="secondary" style={{ fontSize: 11, display: 'block', textAlign: 'center', marginBottom: 6 }}>
-                    {t('mobile.stock', { count: p.quantity })}
-                  </Text>
-
-                  {/* Counter */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                    <button
-                      onClick={() => setQtys(q => {
-                        const next = (q[p.id] ?? 0) - 1;
-                        if (next <= 0) { const n = { ...q }; delete n[p.id]; return n; }
-                        return { ...q, [p.id]: next };
-                      })}
-                      style={{
-                        width: 26, height: 26, borderRadius: 6, border: '1px solid #d9d9d9',
-                        background: '#f5f5f5', cursor: 'pointer', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
-                    >
-                      <MinusOutlined style={{ fontSize: 11 }} />
-                    </button>
-                    <Text strong style={{ minWidth: 22, textAlign: 'center', fontSize: 13 }}>
-                      {qty}
-                    </Text>
-                    <button
-                      onClick={() => setQtys(q => ({ ...q, [p.id]: (q[p.id] ?? 0) + 1 }))}
-                      style={{
-                        width: 26, height: 26, borderRadius: 6, border: '1px solid #1677ff',
-                        background: '#1677ff', cursor: 'pointer', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center', padding: 0,
-                      }}
-                    >
-                      <PlusOutlined style={{ fontSize: 11, color: '#fff' }} />
-                    </button>
-                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
+          {selected.size > 0 && (
+            <Button type="primary" block size="large" style={{ marginTop: 12 }} onClick={() => setStep(1)}>
+              {t('common.next')} ({selected.size})
+            </Button>
+          )}
+        </>
+      )}
 
-        {/* Footer */}
-        <div style={{
-          padding: '12px 16px',
-          borderTop: '1px solid #f0f0f0',
-          background: '#fff',
-          display: 'flex', alignItems: 'center', gap: 12,
-        }}>
-          <div style={{ flex: 1 }}>
-            <Text type="secondary" style={{ fontSize: 11 }}>{t('common.total')}:</Text>
-            <Text strong style={{ fontSize: 15, color: '#1677ff', marginLeft: 6 }}>
-              {formatCurrency(totalAmount)}
-            </Text>
-          </div>
-          <Button
-            type="primary"
-            size="large"
-            disabled={!hasItems}
-            loading={createMutation.isPending}
-            onClick={handleSubmit}
-            style={{ minWidth: 100 }}
-          >
-            {t('mobile.confirm_invoice')}
+      {step === 1 && (
+        <>
+          <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setStep(0)} style={{ marginBottom: 12 }}>
+            {t('common.back')}
           </Button>
-        </div>
-      </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+            {orderItems.map(({ product: p, qty }) => (
+              <div key={p.id} style={{ background: '#f8faff', borderRadius: 10, padding: '8px 12px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <Text strong style={{ fontSize: 13 }}>{p.name}</Text>
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>×{qty} × {formatCurrency(Number(p.price))}</Text>
+                </div>
+                <Text strong style={{ color: '#1677ff' }}>{formatCurrency(Number(p.price) * qty)}</Text>
+              </div>
+            ))}
+          </div>
+          <Input.TextArea
+            rows={2} placeholder={t('common.notes')}
+            value={notes} onChange={e => setNotes(e.target.value)}
+            style={{ marginBottom: 10 }}
+          />
+          <div style={{ background: '#1677ff', borderRadius: 10, padding: '10px 14px', marginBottom: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ color: '#fff', fontWeight: 600 }}>{t('invoices.total')}</Text>
+            <Text style={{ color: '#fff', fontWeight: 700, fontSize: 18 }}>{formatCurrency(total)}</Text>
+          </div>
+          <Button type="primary" block size="large" loading={mutation.isPending} onClick={handleSubmit}>
+            ✓ {t('invoices.create_invoice')}
+          </Button>
+        </>
+      )}
     </Modal>
   );
 };
 
 /* ══════════════════════════════════════
-   RETURN WIZARD MODAL (3-step)
+   INVOICES SECTION
 ══════════════════════════════════════ */
-interface ReturnWizardProps {
+/* ══════════════════════════════════════
+   BULK PAYMENT MODAL
+══════════════════════════════════════ */
+const BulkPaymentModal: React.FC<{
   open: boolean;
   shop: Shop;
-  userId: number;
+  unpaidCount: number;
+  totalDebt: number;
   onClose: () => void;
-}
-
-const ReturnWizardModal: React.FC<ReturnWizardProps> = ({ open, shop, userId, onClose }) => {
+  onSuccess: () => void;
+}> = ({ open, shop, unpaidCount, totalDebt, onClose, onSuccess }) => {
   const { t } = useTranslation();
-  const qc = useQueryClient();
-  const [step, setStep] = useState(0);
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
-  const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
+  const [amount, setAmount] = useState<number>(0);
+  const [method, setMethod] = useState<PaymentMethod>('CASH');
   const [desc, setDesc] = useState('');
 
-  const { data: shopInvoices = [], isLoading: invLoading } = useQuery({
-    queryKey: ['invoices-for-return', shop.id, userId],
-    queryFn: () => filterInvoices({ shopId: shop.id, userId }),
-    enabled: open && !!shop.id && !!userId,
-  });
-
-  const last5Unpaid = useMemo(
-    () => shopInvoices.filter(i => !i.paid).slice(-5).reverse(),
-    [shopInvoices],
-  );
-
-  const createMutation = useMutation({
-    mutationFn: createReturn,
+  const mutation = useMutation({
+    mutationFn: () => bulkCollectPayment({ shopId: shop.id, amount, paymentMethod: method, description: desc || undefined }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['returns'] });
-      message.success(t('returns.return_created'));
-      handleClose();
+      message.success(t('wizards.bulk_collect.success_title'));
+      onSuccess();
+      onClose();
+      setAmount(0); setDesc('');
     },
     onError: () => message.error(t('common.error')),
   });
 
-  const handleClose = () => {
-    setStep(0);
-    setSelectedInvoice(null);
-    setReturnQtys({});
-    setDesc('');
-    onClose();
-  };
-
-  const handleSubmit = () => {
-    if (!selectedInvoice) return;
-    const products: ReturnProductItem[] = selectedInvoice.products
-      .filter(p => (returnQtys[p.productId] ?? 0) > 0)
-      .map(p => ({ productId: p.productId, quantity: returnQtys[p.productId] }));
-    if (!products.length) { message.warning(t('mobile.no_items_selected')); return; }
-    createMutation.mutate({
-      userId,
-      shopId: shop.id,
-      invoiceId: selectedInvoice.id,
-      description: desc,
-      products,
-    });
-  };
-
   return (
     <Modal
+      title={t('wizards.bulk_collect.title')}
       open={open}
-      title={t('mobile.new_return')}
-      onCancel={handleClose}
+      onCancel={onClose}
       footer={null}
       destroyOnHidden
     >
-      <Steps
-        current={step}
-        size="small"
-        style={{ marginBottom: 20 }}
-        items={[
-          { title: t('mobile.select_invoice') },
-          { title: t('common.product') },
-          { title: t('mobile.confirm_invoice') },
-        ]}
-      />
-
-      {/* Step 0: Select invoice */}
-      {step === 0 && (
-        <div>
-          <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 10 }}>
-            {t('mobile.last5_unpaid')} — {shop.title}:
-          </Text>
-          {invLoading && <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>}
-          {!invLoading && last5Unpaid.length === 0 && (
-            <Empty description={t('mobile.no_unpaid_invoices')} />
-          )}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {last5Unpaid.map(inv => (
-              <div
-                key={inv.id}
-                onClick={() => { setSelectedInvoice(inv); setReturnQtys({}); setStep(1); }}
-                style={{
-                  padding: 12, background: '#f0f4ff', borderRadius: 10,
-                  cursor: 'pointer', border: '1px solid #d6e8ff',
-                  transition: 'background 0.15s',
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Text strong style={{ fontSize: 13 }}>{t('mobile.invoice_of')} #{inv.id}</Text>
-                  <Text type="secondary" style={{ fontSize: 11 }}>
-                    {dayjs(inv.date).format('DD.MM.YY')}
-                  </Text>
-                </div>
-                <Text style={{ color: '#1677ff', fontSize: 13, fontWeight: 600 }}>
-                  {formatCurrency(inv.totalPrice)}
-                </Text>
-              </div>
-            ))}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ background: '#fff7e6', borderRadius: 10, padding: '12px 14px', display: 'flex', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>{t('wizards.bulk_collect.unpaid_invoices')}</div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{unpaidCount}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: '#6b7280' }}>{t('wizards.bulk_collect.total_debt')}</div>
+            <div style={{ fontWeight: 700, fontSize: 16, color: '#fa8c16' }}>{formatCurrency(totalDebt)}</div>
           </div>
         </div>
-      )}
-
-      {/* Step 1: Select product quantities */}
-      {step === 1 && selectedInvoice && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setStep(0)}>
-              {t('mobile.back_to_list')}
-            </Button>
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {t('mobile.invoice_of')} #{selectedInvoice.id}
-            </Text>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {selectedInvoice.products.map(p => (
-              <div
-                key={p.productId}
-                style={{
-                  display: 'flex', justifyContent: 'space-between',
-                  alignItems: 'center', padding: '8px 0',
-                  borderBottom: '1px solid #f5f5f5',
-                }}
-              >
-                <div>
-                  <Text strong style={{ fontSize: 13 }}>{p.productName}</Text>
-                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                    {t('common.quantity')}: {p.quantity}
-                  </Text>
-                </div>
-                <InputNumber
-                  min={0}
-                  max={p.quantity}
-                  size="small"
-                  style={{ width: 72 }}
-                  value={returnQtys[p.productId] ?? 0}
-                  onChange={v => setReturnQtys(q => ({ ...q, [p.productId]: v ?? 0 }))}
-                />
-              </div>
-            ))}
-          </div>
-          <Button
-            type="primary"
-            block
-            style={{ marginTop: 16 }}
-            onClick={() => setStep(2)}
-          >
-            {t('common.next')}
-          </Button>
+        <InputNumber
+          placeholder={t('common.amount')}
+          style={{ width: '100%' }}
+          value={amount || undefined}
+          onChange={v => setAmount(v ?? 0)}
+          min={0}
+        />
+        <div style={{ display: 'flex', gap: 6 }}>
+          {([totalDebt, Math.round(totalDebt / 2)] as number[]).map(preset => (
+            <button key={preset} onClick={() => setAmount(preset)} style={{
+              flex: 1, border: '1px solid #d9d9d9', borderRadius: 8, padding: '6px 0',
+              background: amount === preset ? '#1677ff' : '#fafafa',
+              color: amount === preset ? '#fff' : '#374151',
+              cursor: 'pointer', fontSize: 12, fontWeight: 600,
+            }}>
+              {formatCurrency(preset)}
+            </button>
+          ))}
         </div>
-      )}
-
-      {/* Step 2: Notes + submit */}
-      {step === 2 && selectedInvoice && (
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Button size="small" icon={<ArrowLeftOutlined />} onClick={() => setStep(1)}>
-              {t('mobile.back_to_list')}
-            </Button>
-          </div>
-          <Text strong style={{ display: 'block', marginBottom: 6 }}>{t('common.products')}:</Text>
-          {selectedInvoice.products
-            .filter(p => (returnQtys[p.productId] ?? 0) > 0)
-            .map(p => (
-              <div key={p.productId} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0' }}>
-                <span>{p.productName}</span>
-                <span>×{returnQtys[p.productId]}</span>
-              </div>
-            ))}
-          <Divider style={{ margin: '12px 0' }} />
-          <Text strong style={{ display: 'block', marginBottom: 6 }}>{t('common.description')}:</Text>
-          <Input.TextArea
-            rows={3}
-            placeholder={t('common.description')}
-            value={desc}
-            onChange={e => setDesc(e.target.value)}
-            style={{ marginBottom: 16 }}
-          />
-          <Button
-            type="primary"
-            block
-            size="large"
-            loading={createMutation.isPending}
-            onClick={handleSubmit}
-          >
-            {t('mobile.confirm_invoice')}
-          </Button>
-        </div>
-      )}
+        <Select value={method} onChange={v => setMethod(v as PaymentMethod)} style={{ width: '100%' }}>
+          <Select.Option value="CASH">{t('payments.method_cash')}</Select.Option>
+          <Select.Option value="CARD">{t('payments.method_card')}</Select.Option>
+          <Select.Option value="TRANSFER">{t('payments.method_bank')}</Select.Option>
+        </Select>
+        <Input.TextArea rows={2} placeholder={t('common.description')} value={desc} onChange={e => setDesc(e.target.value)} />
+        <Button
+          type="primary" block size="large"
+          loading={mutation.isPending}
+          disabled={!amount || amount <= 0}
+          onClick={() => mutation.mutate()}
+        >
+          {t('wizards.bulk_collect.confirm_btn', { amount: formatCurrency(amount) })}
+        </Button>
+      </div>
     </Modal>
   );
 };
 
-/* ══════════════════════════════════════
-   SHOP DETAIL — INVOICES SUB-TAB
-══════════════════════════════════════ */
-interface ShopInvoicesProps {
-  shop: Shop;
-  userId: number;
-}
-
-const ShopInvoicesPanel: React.FC<ShopInvoicesProps> = ({ shop, userId }) => {
+const InvoicesSection: React.FC<{ shop: Shop }> = ({ shop }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unpaid' | 'unprinted'>('all');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
-  const [selectedInvoiceForPayment, setSelectedInvoiceForPayment] = useState<Invoice | null>(null);
+  const [filter, setFilter] = useState<InvFilter>('all');
+  const [createOpen, setCreateOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [payInvoice, setPayInvoice] = useState<Invoice | null>(null);
   const [scanTarget, setScanTarget] = useState<QRVerifyTarget | null>(null);
 
   const { data: invoices = [], isLoading } = useQuery({
-    queryKey: ['my-invoices', userId, shop.id],
-    queryFn: () => filterInvoices({ userId, shopId: shop.id }),
-    enabled: !!userId && !!shop.id,
+    queryKey: ['shop-invoices', shop.id, user?.id],
+    queryFn: () => filterInvoices({ shopId: shop.id, userId: user?.id }),
+    enabled: !!user?.id,
   });
 
   const markPrinted = useMutation({
     mutationFn: markInvoicePrinted,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['my-invoices', userId, shop.id] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['shop-invoices'] }),
   });
 
-  const filtered = invoices.filter(i =>
-    statusFilter === 'unpaid' ? !i.paid
-      : statusFilter === 'unprinted' ? !i.printed
-        : true,
-  );
+  const unpaidInvoices = invoices.filter(inv => !inv.paid);
+  const totalDebt = unpaidInvoices.reduce((s, inv) => s + Number(inv.totalPrice), 0);
+
+  const filtered = invoices.filter(inv => {
+    if (filter === 'unpaid') return !inv.paid;
+    if (filter === 'unprinted') return !inv.printed;
+    return true;
+  });
 
   const toPrint = (inv: Invoice): PrintInvoiceData => ({
     id: inv.id, type: 'inv', date: inv.date,
-    shopId: inv.shop.id, shopTitle: inv.shop.title,
-    userId: inv.user.id, userFullname: inv.user.fullname,
-    totalPrice: inv.totalPrice, notes: inv.notes,
-    products: inv.products.map(p => ({
-      productName: p.productName, quantity: p.quantity,
-      unitPrice: p.unitPrice, totalPrice: p.totalPrice,
+    shopId: inv.shop?.id, shopTitle: inv.shop?.title ?? shop.title,
+    userId: inv.user?.id ?? user?.id ?? 0, userFullname: inv.user?.fullname ?? user?.fullname ?? '',
+    totalPrice: Number(inv.totalPrice), paid: inv.paid, notes: inv.notes,
+    products: (inv.products ?? []).map(p => ({
+      productName: p.productName, quantity: p.quantity, unitPrice: p.unitPrice,
+      totalPrice: p.unitPrice * p.quantity,
     })),
   });
 
-  const filterPills: { key: 'all' | 'unpaid' | 'unprinted'; label: string }[] = [
-    { key: 'all', label: t('common.all') },
-    { key: 'unpaid', label: t('common.unpaid') },
-    { key: 'unprinted', label: t('invoices.not_printed') },
-  ];
-
   return (
-    <div style={{ padding: '4px 12px 80px' }}>
-      {/* Filter pills */}
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', padding: '8px 0', scrollbarWidth: 'none', flexShrink: 0 }}>
-        {filterPills.map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setStatusFilter(key)}
-            style={{
-              whiteSpace: 'nowrap', border: 'none', borderRadius: 20, padding: '5px 14px',
-              fontSize: 12, fontWeight: statusFilter === key ? 600 : 400, cursor: 'pointer',
-              background: statusFilter === key ? '#1677ff' : '#f0f4ff',
-              color: statusFilter === key ? '#fff' : '#6b7280',
-              transition: 'all 0.2s',
-            }}
-          >
-            {label}
+    <div style={{ padding: 12 }}>
+      {/* Filter chips */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+        {(['all', 'unpaid', 'unprinted'] as InvFilter[]).map(f => (
+          <button key={f} onClick={() => setFilter(f)} style={{
+            border: 'none', borderRadius: 20, padding: '5px 14px', fontSize: 12, cursor: 'pointer',
+            background: filter === f ? '#1677ff' : '#f0f4ff',
+            color: filter === f ? '#fff' : '#6b7280',
+            fontWeight: filter === f ? 600 : 400,
+          }}>
+            {f === 'all' ? t('common.all') : f === 'unpaid' ? t('common.unpaid') : t('invoices.not_printed')}
           </button>
         ))}
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+          {unpaidInvoices.length > 1 && (
+            <Button size="small" style={{ borderRadius: 20, borderColor: '#fa8c16', color: '#fa8c16' }} onClick={() => setBulkOpen(true)}>
+              💰 {t('menu.bulk_collect_payment')}
+            </Button>
+          )}
+          <Button type="primary" size="small" style={{ borderRadius: 20 }} onClick={() => setCreateOpen(true)}>
+            + {t('invoices.create_invoice')}
+          </Button>
+        </div>
       </div>
 
-      {isLoading && <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>}
-      {!isLoading && filtered.length === 0 && (
-        <Empty description={t('invoices.no_invoices')} style={{ padding: '32px 0' }} />
-      )}
+      {isLoading && <div style={{ textAlign: 'center', padding: 20 }}>{t('common.loading')}</div>}
+      {!isLoading && filtered.length === 0 && <Empty />}
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
-        {filtered.map(inv => {
-          const isOpen = expandedId === inv.id;
-          return (
-            <div
-              key={inv.id}
-              style={{ ...card, borderLeft: `4px solid ${inv.paid ? '#52c41a' : '#fa8c16'}` }}
-            >
-              <div
-                onClick={() => setExpandedId(isOpen ? null : inv.id)}
-                style={{ padding: '10px 12px', cursor: 'pointer' }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div>
-                    <Text strong style={{ fontSize: 13 }}>{t('mobile.invoice_of')} #{inv.id}</Text>
-                    <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                      {dayjs(inv.date).format('DD.MM.YYYY HH:mm')}
-                    </Text>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <Text strong style={{ color: '#1677ff', fontSize: 14 }}>
-                      {inv.free ? <Tag color="blue">{t('common.free')}</Tag> : formatCurrency(inv.totalPrice)}
-                    </Text>
-                    <div style={{ marginTop: 3 }}>
-                      <Space size={3}>
-                        <Tag
-                          color={inv.paid ? 'green' : 'orange'}
-                          style={{ fontSize: 10, margin: 0, lineHeight: '18px' }}
-                        >
-                          {inv.paid ? t('common.paid') : t('common.unpaid')}
-                        </Tag>
-                        {inv.printed
-                          ? <Tag color="green" style={{ fontSize: 10, margin: 0, lineHeight: '18px' }}>{t('invoices.printed')}</Tag>
-                          : <Tag style={{ fontSize: 10, margin: 0, lineHeight: '18px' }}>{t('invoices.not_printed')}</Tag>
-                        }
-                      </Space>
-                    </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {filtered.map(inv => (
+          <div key={inv.id} style={{ ...card, borderLeft: `3px solid ${inv.paid ? '#52c41a' : '#fa8c16'}` }}>
+            <div style={{ padding: '10px 12px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
+                <div>
+                  <Text strong style={{ fontSize: 14 }}>{t('invoices.invoice')} #{inv.id}</Text>
+                  <div><Text type="secondary" style={{ fontSize: 11 }}>{dayjs(inv.date).format('DD.MM.YYYY HH:mm')}</Text></div>
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <Text strong style={{ color: '#1677ff', fontSize: 16 }}>{formatCurrency(inv.totalPrice)}</Text>
+                  <div style={{ display: 'flex', gap: 4, marginTop: 3, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                    <Tag color={inv.paid ? 'green' : 'orange'} style={{ fontSize: 10, margin: 0 }}>
+                      {inv.paid ? t('common.paid') : t('common.unpaid')}
+                    </Tag>
+                    {inv.printed
+                      ? <Tag color="green" style={{ fontSize: 10, margin: 0 }}>{t('invoices.printed')}</Tag>
+                      : <Tag style={{ fontSize: 10, margin: 0 }}>{t('invoices.not_printed')}</Tag>}
                   </div>
                 </div>
               </div>
 
-              {isOpen && (
-                <div style={{ borderTop: '1px solid #f5f5f5', padding: '8px 12px' }}>
-                  {/* Products */}
-                  <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>{t('common.products')}:</Text>
-                  {inv.products.map(p => (
-                    <div
-                      key={p.id}
-                      style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}
-                    >
-                      <span>{p.productName} ×{p.quantity}</span>
-                      <span>{formatCurrency(p.totalPrice)}</span>
-                    </div>
-                  ))}
+              {/* Products */}
+              <div style={{ borderTop: '1px solid #f5f5f5', paddingTop: 6, marginBottom: 8 }}>
+                <Text type="secondary" style={{ fontSize: 11, marginBottom: 3, display: 'block' }}>{t('invoices.products')}:</Text>
+                {(inv.products ?? []).map((p, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '1px 0' }}>
+                    <span>{p.productName} ×{p.quantity}</span>
+                    <span style={{ color: '#6b7280' }}>{formatCurrency(p.unitPrice * p.quantity)}</span>
+                  </div>
+                ))}
+              </div>
 
-                  {/* Payments */}
-                  {inv.payments.length > 0 && (
-                    <>
-                      <Divider style={{ margin: '6px 0' }} />
-                      <Text type="secondary" style={{ fontSize: 11, fontWeight: 600 }}>{t('menu.payments')}:</Text>
-                      {inv.payments.map(p => (
-                        <div
-                          key={p.id}
-                          style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, padding: '2px 0' }}
-                        >
-                          <span>{dayjs(p.paidAt).format('DD.MM.YY')}</span>
-                          <span>{formatCurrency(p.amount)}</span>
-                        </div>
-                      ))}
-                    </>
-                  )}
-
-                  {/* Actions */}
-                  <Space style={{ marginTop: 10 }} wrap>
-                    <Button
-                      size="small"
-                      icon={<PrinterOutlined />}
-                      onClick={() => {
-                        printInvoice(toPrint(inv));
-                        if (!inv.printed) markPrinted.mutate(inv.id);
-                      }}
-                    >
-                      {t('invoices.print')}
-                    </Button>
-                    {!inv.paid && (
-                      <Button
-                        size="small"
-                        icon={<DollarOutlined />}
-                        type="primary"
-                        onClick={() => setSelectedInvoiceForPayment(inv)}
-                      >
-                        {t('payments.record_payment')}
-                      </Button>
-                    )}
-                    {!inv.printed && (
-                      <Button
-                        size="small"
-                        icon={<ScanOutlined />}
-                        onClick={() => setScanTarget({
-                          type: 'inv', id: inv.id,
-                          shopId: inv.shop.id, userId: inv.user.id,
-                          total: inv.totalPrice,
-                        })}
-                      >
-                        {t('invoices.scan_qr')}
-                      </Button>
-                    )}
-                  </Space>
-                </div>
-              )}
+              {/* Actions */}
+              <Space wrap size={6}>
+                <Button
+                  size="small"
+                  icon={<PrinterOutlined />}
+                  onClick={() => {
+                    mobilePrintInvoice(toPrint(inv));
+                    if (!inv.printed) markPrinted.mutate(inv.id);
+                  }}
+                >
+                  {t('invoices.print')}
+                </Button>
+                {!inv.paid && (
+                  <Button
+                    size="small" type="primary" ghost
+                    icon={<DollarOutlined />}
+                    onClick={() => setPayInvoice(inv)}
+                  >
+                    {t('payments.record_payment')}
+                  </Button>
+                )}
+                {!inv.printed && (
+                  <Button
+                    size="small"
+                    icon={<ScanOutlined />}
+                    onClick={() => setScanTarget({
+                      type: 'inv', id: inv.id,
+                      shopId: inv.shop?.id, userId: inv.user?.id, total: inv.totalPrice,
+                    })}
+                  >
+                    {t('invoices.scan_qr')}
+                  </Button>
+                )}
+              </Space>
             </div>
-          );
-        })}
+          </div>
+        ))}
       </div>
 
+      <CreateInvoiceModal
+        open={createOpen} shop={shop}
+        onClose={() => setCreateOpen(false)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['shop-invoices'] })}
+      />
+      <BulkPaymentModal
+        open={bulkOpen} shop={shop}
+        unpaidCount={unpaidInvoices.length}
+        totalDebt={totalDebt}
+        onClose={() => setBulkOpen(false)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['shop-invoices'] })}
+      />
       <PaymentModal
-        open={!!selectedInvoiceForPayment}
-        invoice={selectedInvoiceForPayment}
-        shop={shop}
-        onClose={() => setSelectedInvoiceForPayment(null)}
-        onSuccess={() => {
-          qc.invalidateQueries({ queryKey: ['my-invoices', userId, shop.id] });
-          qc.invalidateQueries({ queryKey: ['my-invoices', userId] });
-          setSelectedInvoiceForPayment(null);
-        }}
+        open={!!payInvoice} invoice={payInvoice}
+        onClose={() => setPayInvoice(null)}
+        onSuccess={() => qc.invalidateQueries({ queryKey: ['shop-invoices'] })}
       />
       <QRScannerModal
-        open={!!scanTarget}
-        target={scanTarget}
+        open={!!scanTarget} target={scanTarget}
         onVerified={() => scanTarget && markPrinted.mutate(scanTarget.id)}
         onClose={() => setScanTarget(null)}
       />
@@ -861,63 +535,43 @@ const ShopInvoicesPanel: React.FC<ShopInvoicesProps> = ({ shop, userId }) => {
 };
 
 /* ══════════════════════════════════════
-   SHOP DETAIL — PAYMENTS SUB-TAB
+   PAYMENTS SECTION
 ══════════════════════════════════════ */
-interface ShopPaymentsProps {
-  shop: Shop;
-  userId: number;
-}
-
-const ShopPaymentsPanel: React.FC<ShopPaymentsProps> = ({ shop, userId }) => {
+const PaymentsSection: React.FC<{ shop: Shop }> = ({ shop }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
-  const { data: allPayments = [], isLoading } = useQuery({
-    queryKey: ['payments-by-user', userId],
-    queryFn: () => getPaymentsByUser(userId),
-    enabled: !!userId,
+
+  const { data: payments = [], isLoading } = useQuery({
+    queryKey: ['payments-by-user', user?.id],
+    queryFn: () => getPaymentsByUser(user!.id),
+    enabled: !!user?.id,
   });
 
-  const payments = allPayments.filter(p => p.shopId === shop.id);
-
-  const methodLabel: Record<string, string> = {
-    CASH: t('payments.method_cash'), CARD: t('payments.method_card'),
-    BANK_TRANSFER: t('payments.method_bank'), OTHER: t('payments.method_other'),
-  };
-  const methodColor: Record<string, string> = {
-    CASH: 'green', CARD: 'blue', BANK_TRANSFER: 'purple', OTHER: 'default',
-  };
+  const shopPayments = (payments as any[]).filter(p => p.shopId === shop.id || p.invoice?.shop?.id === shop.id);
 
   return (
-    <div style={{ padding: '8px 12px 80px' }}>
-      {isLoading && <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>}
-      {!isLoading && payments.length === 0 && (
-        <Empty description={t('payments.no_payments')} style={{ padding: '32px 0' }} />
-      )}
+    <div style={{ padding: 12 }}>
+      {isLoading && <div style={{ textAlign: 'center', padding: 20 }}>{t('common.loading')}</div>}
+      {!isLoading && shopPayments.length === 0 && <Empty />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {payments.map(p => (
-          <div
-            key={p.id}
-            style={{
-              ...card, padding: 12,
-              display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            }}
-          >
+        {shopPayments.map((p: any) => (
+          <div key={p.id} style={{ ...card, padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <Text strong style={{ fontSize: 13 }}>
-                {formatCurrency(p.amount)}
-              </Text>
-              <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>
-                {formatDate(p.paidAt)}
-              </Text>
-              <Tag
-                color={methodColor[p.paymentMethod] ?? 'default'}
-                style={{ marginTop: 4, fontSize: 11 }}
-              >
-                {methodLabel[p.paymentMethod] ?? p.paymentMethod}
-              </Tag>
+              <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(p.date).format('DD.MM.YYYY')}</Text>
+              <div>
+                <Tag style={{ fontSize: 10 }}>{p.paymentMethod}</Tag>
+                {p.description && <Text type="secondary" style={{ fontSize: 11 }}> {p.description}</Text>}
+              </div>
+              {p.invoiceId && <Text type="secondary" style={{ fontSize: 11 }}>#{p.invoiceId}</Text>}
             </div>
-            <Text strong style={{ color: '#52c41a', fontSize: 16 }}>
-              +{formatCurrency(p.amount)}
-            </Text>
+            <div style={{ textAlign: 'right' }}>
+              <Text strong style={{ color: '#1677ff', fontSize: 15 }}>{formatCurrency(p.amount)}</Text>
+              <div>
+                {p.accepted
+                  ? <Tag color="green" style={{ fontSize: 10 }}>{t('common.accepted')}</Tag>
+                  : <Tag color="orange" style={{ fontSize: 10 }}>{t('common.pending')}</Tag>}
+              </div>
+            </div>
           </div>
         ))}
       </div>
@@ -926,419 +580,266 @@ const ShopPaymentsPanel: React.FC<ShopPaymentsProps> = ({ shop, userId }) => {
 };
 
 /* ══════════════════════════════════════
-   SHOP DETAIL — RETURNS SUB-TAB
+   RETURNS SECTION
 ══════════════════════════════════════ */
-interface ShopReturnsProps {
-  shop: Shop;
-  userId: number;
-}
-
-const ShopReturnsPanel: React.FC<ShopReturnsProps> = ({ shop, userId }) => {
+const ReturnsSection: React.FC<{ shop: Shop }> = ({ shop }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
+  const qc = useQueryClient();
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [step, setStep] = useState(0);
+  const [selInvoice, setSelInvoice] = useState<Invoice | null>(null);
+  const [returnQtys, setReturnQtys] = useState<Record<number, number>>({});
+  const [desc, setDesc] = useState('');
 
-  const { data: allReturns = [], isLoading } = useQuery({
+  const { data: allReturns = [] } = useQuery({
     queryKey: ['returns'],
     queryFn: getReturns,
   });
 
-  const returns = allReturns.filter(
-    r => r.user.id === userId && r.shop.id === shop.id,
-  );
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['shop-invoices', shop.id, user?.id],
+    queryFn: () => filterInvoices({ shopId: shop.id, userId: user?.id }),
+    enabled: !!user?.id,
+  });
+
+  const mutation = useMutation({
+    mutationFn: (items: any[]) => Promise.all(items.map(createReturn)),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['returns'] });
+      message.success(t('returns.return_created'));
+      setWizardOpen(false); setStep(0); setSelInvoice(null); setReturnQtys({}); setDesc('');
+    },
+  });
+
+  const handleSubmit = () => {
+    if (!selInvoice || !user) return;
+    const items = (selInvoice.products ?? [])
+      .filter(p => (returnQtys[p.productId] ?? 0) > 0)
+      .map(p => ({
+        invoiceId: selInvoice.id,
+        productId: p.productId,
+        quantity: returnQtys[p.productId],
+        description: desc,
+        userId: user.id,
+        shopId: shop.id,
+      }));
+    if (!items.length) { message.error(t('returns.add_qty')); return; }
+    mutation.mutate(items);
+  };
+
+  const shopReturns = (allReturns as any[]).filter(r => r.shopId === shop.id || r.invoice?.shop?.id === shop.id);
+  const unpaidInvoices = invoices.filter(i => !i.paid);
 
   return (
-    <div style={{ padding: '8px 12px 80px' }}>
-      <div style={{ marginBottom: 12 }}>
-        <Button
-          type="primary"
-          icon={<RollbackOutlined />}
-          onClick={() => setWizardOpen(true)}
-          block
-        >
+    <div style={{ padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+        <Button type="primary" icon={<RollbackOutlined />} size="small" onClick={() => { setWizardOpen(true); setStep(0); }}>
           {t('mobile.new_return')}
         </Button>
       </div>
 
-      {isLoading && <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>}
-      {!isLoading && returns.length === 0 && (
-        <Empty description={t('returns.no_returns')} style={{ padding: '32px 0' }} />
-      )}
+      {shopReturns.length === 0 && <Empty />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {returns.map(r => (
-          <div key={r.id} style={{ ...card, padding: 12 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <Text strong style={{ fontSize: 13 }}>{t('menu.returns')} #{r.id}</Text>
-              <Text type="secondary" style={{ fontSize: 11 }}>
-                {dayjs(r.date).format('DD.MM.YYYY')}
-              </Text>
+        {shopReturns.map((r: any) => (
+          <div key={r.id} style={{ ...card, padding: 12, display: 'flex', justifyContent: 'space-between' }}>
+            <div>
+              <Text strong style={{ fontSize: 13 }}>{r.productName}</Text>
+              <div><Text type="secondary" style={{ fontSize: 11 }}>{dayjs(r.date).format('DD.MM.YYYY')}</Text></div>
+              {r.description && <Text type="secondary" style={{ fontSize: 11 }}>{r.description}</Text>}
             </div>
-            {r.products.map(p => (
-              <Text
-                key={p.productId}
-                type="secondary"
-                style={{ fontSize: 12, display: 'block' }}
-              >
-                {p.productName} ×{p.quantity}
-              </Text>
-            ))}
-            {r.description && (
-              <Text type="secondary" style={{ fontSize: 11, marginTop: 4, display: 'block', fontStyle: 'italic' }}>
-                {r.description}
-              </Text>
-            )}
+            <Tag color="red">×{r.quantity}</Tag>
           </div>
         ))}
       </div>
 
-      <ReturnWizardModal
-        open={wizardOpen}
-        shop={shop}
-        userId={userId}
-        onClose={() => setWizardOpen(false)}
-      />
-    </div>
-  );
-};
+      <Modal title={t('mobile.new_return')} open={wizardOpen} onCancel={() => setWizardOpen(false)} footer={null} destroyOnHidden>
+        <Steps current={step} size="small" style={{ marginBottom: 16 }} items={[
+          { title: t('mobile.select_invoice') },
+          { title: t('common.products') },
+        ]} />
 
-/* ══════════════════════════════════════
-   SHOP DETAIL VIEW
-══════════════════════════════════════ */
-interface ShopDetailProps {
-  shop: Shop;
-  userId: number;
-  onBack: () => void;
-}
-
-const ShopDetailView: React.FC<ShopDetailProps> = ({ shop, userId, onBack }) => {
-  const { t } = useTranslation();
-  const [subTab, setSubTab] = useState<ShopSubTab>('invoices');
-  const [invoiceWizardOpen, setInvoiceWizardOpen] = useState(false);
-
-  const subTabs: { key: ShopSubTab; label: string }[] = [
-    { key: 'invoices', label: t('menu.invoices') },
-    { key: 'payments', label: t('menu.payments') },
-    { key: 'returns', label: t('menu.returns') },
-  ];
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f0f4ff' }}>
-      {/* Header */}
-      <div style={{ background: '#fff', padding: '10px 12px 0', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-        {/* Back + shop identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-          <button
-            onClick={onBack}
-            style={{
-              border: 'none', background: '#f0f4ff', borderRadius: 10,
-              width: 36, height: 36, cursor: 'pointer', display: 'flex',
-              alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-            }}
-          >
-            <ArrowLeftOutlined style={{ color: '#1677ff' }} />
-          </button>
-
-          {/* Shop avatar */}
-          {imgSrc(shop.image)
-            ? <img
-                src={imgSrc(shop.image)!}
-                alt={shop.title}
-                style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }}
-              />
-            : <div style={{
-                width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-                background: 'linear-gradient(135deg, #e8f4ff 0%, #bfdbfe 100%)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 20,
-              }}>🏪</div>
-          }
-
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Text strong style={{ fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {shop.title}
-              </Text>
-              {shop.test && <Tag color="orange" style={{ fontSize: 10, margin: 0 }}>TEST</Tag>}
-            </div>
-            {shop.shopkeeper && (
-              <Text type="secondary" style={{ fontSize: 12 }}>{shop.shopkeeper.fullname}</Text>
-            )}
-          </div>
-        </div>
-
-        {/* Contact info row */}
-        {(shop.tel || shop.gps) && (
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
-            {shop.tel && (
-              <a href={`tel:${shop.tel}`} style={{ textDecoration: 'none' }}>
-                <Tag icon={<PhoneOutlined />} color="blue" style={{ cursor: 'pointer', fontSize: 12 }}>
-                  {shop.tel}
-                </Tag>
-              </a>
-            )}
-            {shop.gps && (
-              <a
-                href={`https://maps.google.com/?q=${shop.gps}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{ textDecoration: 'none' }}
-              >
-                <Tag icon={<EnvironmentOutlined />} color="green" style={{ cursor: 'pointer', fontSize: 12 }}>
-                  GPS
-                </Tag>
-              </a>
-            )}
-          </div>
+        {step === 0 && (
+          <>
+            <Text style={{ display: 'block', marginBottom: 8 }}>{t('mobile.last5_unpaid')}</Text>
+            {unpaidInvoices.length === 0 && <Empty description={t('mobile.no_unpaid_invoices')} />}
+            {unpaidInvoices.slice(0, 5).map(inv => (
+              <div key={inv.id} onClick={() => { setSelInvoice(inv); setReturnQtys({}); setStep(1); }} style={{
+                padding: 10, background: '#f0f4ff', borderRadius: 10, marginBottom: 6, cursor: 'pointer',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <Text strong style={{ fontSize: 13 }}>#{inv.id}</Text>
+                  <Text type="secondary" style={{ fontSize: 11 }}>{dayjs(inv.date).format('DD.MM.YY')}</Text>
+                </div>
+                <Text style={{ fontSize: 12 }}>{formatCurrency(inv.totalPrice)}</Text>
+              </div>
+            ))}
+          </>
         )}
 
-        {/* Sub-tab pills */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', scrollbarWidth: 'none' }}>
-          {subTabs.map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setSubTab(key)}
-              style={{
-                whiteSpace: 'nowrap', border: 'none',
-                borderBottom: subTab === key ? '2px solid #1677ff' : '2px solid transparent',
-                padding: '8px 14px', fontSize: 13, cursor: 'pointer',
-                background: 'transparent',
-                color: subTab === key ? '#1677ff' : '#6b7280',
-                fontWeight: subTab === key ? 600 : 400,
-                transition: 'all 0.2s',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Content area */}
-      <div style={{ flex: 1, overflowY: 'auto', position: 'relative' }}>
-        {subTab === 'invoices' && <ShopInvoicesPanel shop={shop} userId={userId} />}
-        {subTab === 'payments' && <ShopPaymentsPanel shop={shop} userId={userId} />}
-        {subTab === 'returns' && <ShopReturnsPanel shop={shop} userId={userId} />}
-      </div>
-
-      {/* FAB */}
-      <button
-        onClick={() => setInvoiceWizardOpen(true)}
-        style={{
-          position: 'fixed', bottom: 76, right: 16,
-          background: 'linear-gradient(135deg, #1677ff 0%, #0958d9 100%)',
-          color: '#fff', border: 'none', borderRadius: 28,
-          padding: '13px 20px', fontSize: 14, fontWeight: 600,
-          cursor: 'pointer', boxShadow: '0 4px 16px rgba(22,119,255,0.4)',
-          display: 'flex', alignItems: 'center', gap: 6,
-          zIndex: 100,
-        }}
-      >
-        <PlusOutlined /> {t('invoices.create_invoice')}
-      </button>
-
-      <InvoiceWizardModal
-        open={invoiceWizardOpen}
-        shop={shop}
-        userId={userId}
-        onClose={() => setInvoiceWizardOpen(false)}
-      />
+        {step === 1 && selInvoice && (
+          <>
+            <Button size="small" onClick={() => setStep(0)} style={{ marginBottom: 10 }}>{t('common.back')}</Button>
+            {(selInvoice.products ?? []).map(p => (
+              <div key={p.productId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div>
+                  <Text style={{ fontSize: 13 }}>{p.productName}</Text>
+                  <Text type="secondary" style={{ fontSize: 11, display: 'block' }}>{t('common.qty')}: {p.quantity}</Text>
+                </div>
+                <InputNumber
+                  min={0} max={p.quantity} size="small" style={{ width: 70 }}
+                  value={returnQtys[p.productId] ?? 0}
+                  onChange={v => setReturnQtys(q => ({ ...q, [p.productId]: v ?? 0 }))}
+                />
+              </div>
+            ))}
+            <Input.TextArea rows={2} placeholder={t('common.notes')} value={desc} onChange={e => setDesc(e.target.value)} style={{ marginBottom: 10 }} />
+            <Button type="primary" block loading={mutation.isPending} onClick={handleSubmit}>
+              {t('returns.submit_return')}
+            </Button>
+          </>
+        )}
+      </Modal>
     </div>
   );
 };
 
 /* ══════════════════════════════════════
-   SHOP ROW
+   SHOP DETAIL
 ══════════════════════════════════════ */
-interface ShopRowProps {
-  shop: Shop;
-  debtCount: number;
-  onSelect: (shop: Shop) => void;
-  t: (key: string, opts?: Record<string, unknown>) => string;
-}
+const ShopDetail: React.FC<{ shop: Shop; onBack: () => void }> = ({ shop, onBack }) => {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<ShopTab>('invoices');
 
-const ShopRow: React.FC<ShopRowProps> = ({ shop, debtCount, onSelect, t }) => (
-  <div
-    onClick={() => onSelect(shop)}
-    style={{
-      ...card,
-      padding: '10px 12px',
-      display: 'flex', alignItems: 'center', gap: 10,
-      cursor: 'pointer',
-      transition: 'box-shadow 0.15s',
-    }}
-  >
-    {/* Avatar */}
-    {imgSrc(shop.image)
-      ? <img
-          src={imgSrc(shop.image)!}
-          alt={shop.title}
-          style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }}
-        />
-      : <div style={{
-          width: 44, height: 44, borderRadius: 10, flexShrink: 0,
-          background: 'linear-gradient(135deg, #e8f4ff 0%, #bfdbfe 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 20,
-        }}>🏪</div>
-    }
+  const openMaps = () => {
+    if (!shop.gps) return;
+    const [lat, lng] = shop.gps.split(',').map(s => s.trim());
+    window.open(`https://maps.google.com/maps?q=${lat},${lng}`, '_blank');
+  };
 
-    <div style={{ flex: 1, minWidth: 0 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-        <Text strong style={{ fontSize: 14, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-          {shop.title}
-        </Text>
-        {shop.test && <Tag color="orange" style={{ fontSize: 10, margin: 0, lineHeight: '16px' }}>TEST</Tag>}
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Shop header */}
+      <div style={{ background: 'linear-gradient(135deg,#1677ff,#0958d9)', color: '#fff', padding: '12px 16px', flexShrink: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+          <Button
+            icon={<ArrowLeftOutlined />} size="small" onClick={onBack}
+            style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff' }}
+          />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: 16 }}>{shop.title}</div>
+            {shop.description && <div style={{ fontSize: 12, opacity: 0.85 }}>{shop.description}</div>}
+          </div>
+        </div>
+        <Space size={8}>
+          {shop.tel && (
+            <Button size="small" icon={<PhoneOutlined />}
+              onClick={() => window.location.href = `tel:${shop.tel}`}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', fontSize: 11 }}>
+              {shop.tel}
+            </Button>
+          )}
+          {shop.gps && (
+            <Button size="small" icon={<EnvironmentOutlined />} onClick={openMaps}
+              style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', fontSize: 11 }}>
+              {t('profile.open_maps')}
+            </Button>
+          )}
+        </Space>
       </div>
-      {shop.shopkeeper && (
-        <Text type="secondary" style={{ fontSize: 12, display: 'block' }}>
-          {shop.shopkeeper.fullname}
-        </Text>
-      )}
-    </div>
 
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3, flexShrink: 0 }}>
-      {debtCount > 0 && (
-        <Tag
-          color="red"
-          style={{ fontSize: 10, margin: 0, lineHeight: '16px', fontWeight: 600 }}
-        >
-          {t('mobile.debt_invoices', { count: debtCount })}
-        </Tag>
-      )}
-      <span style={{ color: '#c0c0c0', fontSize: 16 }}>›</span>
+      {/* Tab bar */}
+      <div style={{ display: 'flex', background: '#f0f4ff', flexShrink: 0 }}>
+        {(['invoices', 'payments', 'returns'] as ShopTab[]).map(tb => (
+          <button key={tb} onClick={() => setTab(tb)} style={{
+            flex: 1, border: 'none', background: 'transparent', padding: '10px 4px',
+            borderBottom: `2px solid ${tab === tb ? '#1677ff' : 'transparent'}`,
+            color: tab === tb ? '#1677ff' : '#6b7280', fontWeight: tab === tb ? 700 : 400, fontSize: 13, cursor: 'pointer',
+          }}>
+            {tb === 'invoices' ? t('menu.invoices') : tb === 'payments' ? t('menu.payments') : t('menu.returns')}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div style={{ flex: 1, overflowY: 'auto' }}>
+        {tab === 'invoices' && <InvoicesSection shop={shop} />}
+        {tab === 'payments' && <PaymentsSection shop={shop} />}
+        {tab === 'returns' && <ReturnsSection shop={shop} />}
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 /* ══════════════════════════════════════
-   SHOP LIST VIEW
+   SHOP LIST
 ══════════════════════════════════════ */
-interface ShopListProps {
-  userId: number;
-  onSelectShop: (shop: Shop) => void;
-}
-
-const ShopListView: React.FC<ShopListProps> = ({ userId, onSelectShop }) => {
+const ShopList: React.FC<{ onSelect: (shop: Shop) => void }> = ({ onSelect }) => {
+  const { user } = useAuthStore();
   const { t } = useTranslation();
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [recentIds, setRecentIds] = useState<number[]>(() => getRecentIds());
-
-  const handleSearchChange = useCallback((val: string) => {
-    setSearchInput(val);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedSearch(val), 300);
-  }, []);
-
-  useEffect(() => {
-    setRecentIds(getRecentIds());
-  }, []);
+  const [search, setSearch] = useState('');
 
   const { data: shops = [], isLoading } = useQuery({
     queryKey: ['shops'],
     queryFn: getShops,
   });
 
-  const { data: allInvoices = [] } = useQuery({
-    queryKey: ['my-invoices', userId],
-    queryFn: () => filterInvoices({ userId }),
-    enabled: !!userId,
-  });
-
-  const unpaidByShop = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const inv of allInvoices) {
-      if (!inv.paid) {
-        map.set(inv.shop.id, (map.get(inv.shop.id) ?? 0) + 1);
-      }
-    }
-    return map;
-  }, [allInvoices]);
-
-  const myShops = useMemo(
-    () => shops.filter(s => s.shopkeeper?.id === userId),
-    [shops, userId],
+  const myShops = shops.filter(s =>
+    (s as any).shopkeeper?.id === user?.id || (s as any).userId === user?.id
   );
 
-  const filteredShops = useMemo(() => {
-    if (!debouncedSearch) return myShops;
-    const q = debouncedSearch.toLowerCase();
-    return myShops.filter(s =>
-      s.title.toLowerCase().includes(q) ||
-      (s.shopkeeper?.fullname ?? '').toLowerCase().includes(q),
-    );
-  }, [myShops, debouncedSearch]);
+  const recentIds = getRecentIds();
+  const recentShops = recentIds.map(id => myShops.find(s => s.id === id)).filter(Boolean) as Shop[];
+  const otherShops = myShops.filter(s => !recentIds.includes(s.id));
 
-  const recentShops = useMemo(
-    () => recentIds.map(id => myShops.find(s => s.id === id)).filter(Boolean) as Shop[],
-    [recentIds, myShops],
+  const filtered = [...recentShops, ...otherShops].filter(s =>
+    s.title.toLowerCase().includes(search.toLowerCase()) ||
+    s.description?.toLowerCase().includes(search.toLowerCase())
   );
-
-  const handleSelect = (shop: Shop) => {
-    addRecentId(shop.id);
-    setRecentIds(getRecentIds());
-    onSelectShop(shop);
-  };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: '#f0f4ff' }}>
-      {/* Search bar */}
-      <div style={{ padding: '12px 12px 6px', background: '#f0f4ff', flexShrink: 0 }}>
-        <Input
-          prefix={<SearchOutlined style={{ color: '#9ca3af' }} />}
-          placeholder={t('mobile.search_shops')}
-          value={searchInput}
-          onChange={e => handleSearchChange(e.target.value)}
-          allowClear
-          onClear={() => handleSearchChange('')}
-          style={{ borderRadius: 12 }}
-        />
-      </div>
-
-      <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 16px' }}>
-        {/* Recent shops */}
-        {recentShops.length > 0 && !debouncedSearch && (
-          <div style={{ marginBottom: 14 }}>
-            <Text type="secondary" style={{ fontSize: 11, fontWeight: 600, letterSpacing: 0.5, textTransform: 'uppercase', display: 'block', marginBottom: 8 }}>
-              {t('mobile.recent_shops')}
-            </Text>
-            <div style={{ display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 4 }}>
-              {recentShops.map(shop => (
-                <button
-                  key={shop.id}
-                  onClick={() => handleSelect(shop)}
-                  style={{
-                    flexShrink: 0, border: 'none', borderRadius: 20,
-                    background: '#e8f4ff', cursor: 'pointer',
-                    padding: '7px 14px', fontSize: 12, fontWeight: 500,
-                    color: '#1677ff', whiteSpace: 'nowrap',
-                    boxShadow: '0 1px 4px rgba(22,119,255,0.1)',
-                    transition: 'background 0.15s',
-                  }}
-                >
-                  {shop.title}
-                </button>
-              ))}
+    <div style={{ padding: 12 }}>
+      <Input
+        prefix={<SearchOutlined />}
+        placeholder={t('shops.search')}
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        style={{ marginBottom: 12 }}
+        allowClear
+      />
+      {isLoading && <div style={{ textAlign: 'center', padding: 20 }}>{t('common.loading')}</div>}
+      {!isLoading && filtered.length === 0 && <Empty description={t('shops.no_shops')} />}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {filtered.map(shop => (
+          <div
+            key={shop.id}
+            onClick={() => { addRecentId(shop.id); onSelect(shop); }}
+            style={{ ...card, cursor: 'pointer', padding: 0 }}
+          >
+            <div style={{ display: 'flex', gap: 12, padding: '12px 14px', alignItems: 'center' }}>
+              {shop.image
+                ? <img src={imgSrc(shop.image)!} alt={shop.title} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }} />
+                : <div style={{ width: 52, height: 52, background: 'linear-gradient(135deg,#e0e7ff,#c7d2fe)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, flexShrink: 0 }}>
+                    <ShopOutlined style={{ color: '#4f46e5' }} />
+                  </div>}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <Text strong style={{ fontSize: 14, display: 'block' }}>{shop.title}</Text>
+                {shop.description && (
+                  <Text type="secondary" style={{ fontSize: 12, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {shop.description}
+                  </Text>
+                )}
+                {shop.tel && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                    <PhoneOutlined style={{ fontSize: 11, color: '#9ca3af' }} />
+                    <Text type="secondary" style={{ fontSize: 11 }}>{shop.tel}</Text>
+                  </div>
+                )}
+              </div>
+              <div style={{ color: '#d0d7e8', fontSize: 18 }}>›</div>
             </div>
           </div>
-        )}
-
-        {/* Shop list */}
-        {isLoading && <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>}
-        {!isLoading && filteredShops.length === 0 && (
-          <Empty description={t('mobile.shops_not_found')} style={{ padding: '40px 0' }} />
-        )}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {filteredShops.map(shop => (
-            <ShopRow
-              key={shop.id}
-              shop={shop}
-              debtCount={unpaidByShop.get(shop.id) ?? 0}
-              onSelect={handleSelect}
-              t={t}
-            />
-          ))}
-        </div>
+        ))}
       </div>
     </div>
   );
@@ -1348,27 +849,13 @@ const ShopListView: React.FC<ShopListProps> = ({ userId, onSelectShop }) => {
    SHOPS TAB ROOT
 ══════════════════════════════════════ */
 const ShopsTab: React.FC = () => {
-  const { user } = useAuthStore();
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
-  if (!user) return null;
-
   if (selectedShop) {
-    return (
-      <ShopDetailView
-        shop={selectedShop}
-        userId={user.id}
-        onBack={() => setSelectedShop(null)}
-      />
-    );
+    return <ShopDetail shop={selectedShop} onBack={() => setSelectedShop(null)} />;
   }
 
-  return (
-    <ShopListView
-      userId={user.id}
-      onSelectShop={setSelectedShop}
-    />
-  );
+  return <ShopList onSelect={setSelectedShop} />;
 };
 
 export default ShopsTab;

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Avatar, Button, Typography, message, Form, Input } from 'antd';
-import { EnvironmentOutlined, EnvironmentFilled, UserOutlined, EditOutlined, LockOutlined } from '@ant-design/icons';
+import { UserOutlined, EditOutlined, LockOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUser, updateUser, updateUserGps } from '../../../api/users';
+import { getAdmin, updateAdmin } from '../../../api/admins';
 import { changePassword } from '../../../api/auth';
 import { useAuthStore } from '../../../store/authStore';
 import ImageUpload from '../../../components/common/ImageUpload';
@@ -11,13 +11,9 @@ import { useTranslation } from 'react-i18next';
 const imgSrc = (url?: string | null) =>
   !url ? undefined : url.startsWith('http') ? url : `/api${url}`;
 
-const openMap = (gps?: string | null) => {
-  if (gps) window.open(`https://www.google.com/maps?q=${gps}`, '_blank', 'noopener,noreferrer');
-};
-
 const card = { background: '#fff', borderRadius: 14, padding: '12px 16px', boxShadow: '0 2px 8px rgba(0,0,0,0.05)' } as const;
 
-const ProfileTab: React.FC = () => {
+const AdminProfileTab: React.FC = () => {
   const { user: auth } = useAuthStore();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -26,46 +22,30 @@ const ProfileTab: React.FC = () => {
   const [form] = Form.useForm();
   const [pwForm] = Form.useForm();
 
-  const { data: user } = useQuery({
-    queryKey: ['user', auth?.id],
-    queryFn: () => getUser(auth!.id),
+  const { data: admin } = useQuery({
+    queryKey: ['admin', auth?.id],
+    queryFn: () => getAdmin(auth!.id),
     enabled: !!auth?.id,
   });
 
   const photoMutation = useMutation({
-    mutationFn: (photo: string | undefined) => updateUser(auth!.id, { ...user!, photo }),
+    mutationFn: (photo: string | undefined) =>
+      updateAdmin(auth!.id, { ...admin!, photo, role: admin!.role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin', auth?.id] });
       message.success(t('profile.profile_updated'));
     },
   });
 
   const editMutation = useMutation({
-    mutationFn: (values: { fullname: string; tel?: string; address?: string; description?: string }) =>
-      updateUser(auth!.id, { ...user!, ...values }),
+    mutationFn: (values: { fullname: string; tel?: string; description?: string }) =>
+      updateAdmin(auth!.id, { ...admin!, ...values, role: admin!.role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin', auth?.id] });
       message.success(t('profile.profile_updated'));
       setEditing(false);
     },
     onError: () => message.error(t('common.error')),
-  });
-
-  const gpsMutation = useMutation({
-    mutationFn: () =>
-      new Promise<void>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const gps = `${pos.coords.latitude},${pos.coords.longitude}`;
-            updateUserGps(auth!.id, gps).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
-              message.success(t('profile.gps_updated'));
-              resolve();
-            }).catch(reject);
-          },
-          () => { message.error(t('profile.gps_error')); reject(); }
-        );
-      }),
   });
 
   const pwMutation = useMutation({
@@ -81,34 +61,34 @@ const ProfileTab: React.FC = () => {
 
   const startEdit = () => {
     form.setFieldsValue({
-      fullname: user?.fullname,
-      tel: user?.tel,
-      address: user?.address,
-      description: user?.description,
+      fullname: admin?.fullname,
+      tel: admin?.tel,
+      description: admin?.description,
     });
     setEditing(true);
   };
 
   return (
     <div style={{ padding: '16px 12px', display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* Profile header card */}
+      {/* Profile header */}
       <div style={{
         background: 'linear-gradient(135deg, #1677ff 0%, #0958d9 100%)',
         borderRadius: 18, padding: '20px 16px',
         display: 'flex', alignItems: 'center', gap: 16,
       }}>
-        <Avatar src={imgSrc(user?.photo)} icon={<UserOutlined />} size={72}
+        <Avatar src={imgSrc(admin?.photo)} icon={<UserOutlined />} size={72}
           style={{ border: '3px solid rgba(255,255,255,0.4)', flexShrink: 0 }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <Typography.Title level={5} style={{ margin: 0, color: '#fff', fontSize: 16 }}>{user?.fullname}</Typography.Title>
-          <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>@{user?.username}</Typography.Text>
+          <Typography.Title level={5} style={{ margin: 0, color: '#fff', fontSize: 16 }}>{admin?.fullname}</Typography.Title>
+          <Typography.Text style={{ color: 'rgba(255,255,255,0.75)', fontSize: 13 }}>@{admin?.username}</Typography.Text>
+          <Typography.Text style={{ color: 'rgba(255,255,255,0.6)', fontSize: 12, display: 'block' }}>{admin?.role}</Typography.Text>
           <div style={{ marginTop: 10 }}>
-            <ImageUpload value={user?.photo} onChange={url => photoMutation.mutate(url)} hidePreview />
+            <ImageUpload value={admin?.photo} onChange={url => photoMutation.mutate(url)} hidePreview />
           </div>
         </div>
       </div>
 
-      {/* Edit form or info display */}
+      {/* Edit form or info */}
       {editing ? (
         <div style={{ ...card }}>
           <Form form={form} layout="vertical" onFinish={editMutation.mutate}>
@@ -116,9 +96,6 @@ const ProfileTab: React.FC = () => {
               <Input />
             </Form.Item>
             <Form.Item name="tel" label={t('common.phone')} style={{ marginBottom: 10 }}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="address" label={t('common.address')} style={{ marginBottom: 10 }}>
               <Input />
             </Form.Item>
             <Form.Item name="description" label={t('common.description')} style={{ marginBottom: 10 }}>
@@ -135,38 +112,17 @@ const ProfileTab: React.FC = () => {
       ) : (
         <>
           {[
-            { label: t('common.full_name'), value: user?.fullname },
-            { label: t('common.username'), value: user?.username },
-            { label: t('common.phone'), value: user?.tel },
-            { label: t('common.address'), value: user?.address },
-            { label: t('common.description'), value: user?.description },
+            { label: t('common.full_name'), value: admin?.fullname },
+            { label: t('common.username'), value: admin?.username },
+            { label: t('common.phone'), value: admin?.tel },
+            { label: t('common.role'), value: admin?.role },
+            { label: t('common.description'), value: admin?.description },
           ].map(({ label, value }) => (
             <div key={label} style={{ ...card, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>{label}</span>
               <span style={{ fontSize: 14, color: '#1a1a2e', fontWeight: 500, maxWidth: '60%', textAlign: 'right' }}>{value || '-'}</span>
             </div>
           ))}
-
-          {/* GPS card */}
-          <div style={{ ...card }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-              <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 500 }}>{t('common.gps')}</span>
-              <div style={{ display: 'flex', gap: 6 }}>
-                {user?.gps && (
-                  <Button size="small" icon={<EnvironmentFilled />} onClick={() => openMap(user?.gps)}>
-                    {t('profile.open_map')}
-                  </Button>
-                )}
-                <Button size="small" type="primary" icon={<EnvironmentOutlined />}
-                  onClick={() => gpsMutation.mutate()} loading={gpsMutation.isPending} style={{ borderRadius: 8 }}>
-                  {t('profile.update_gps')}
-                </Button>
-              </div>
-            </div>
-            <span style={{ fontSize: 12, color: '#6b7280', fontFamily: 'monospace' }}>
-              {user?.gps || t('profile.not_set')}
-            </span>
-          </div>
 
           <Button icon={<EditOutlined />} block onClick={startEdit} style={{ borderRadius: 12, height: 42 }}>
             {t('profile.edit_profile')}
@@ -225,4 +181,4 @@ const ProfileTab: React.FC = () => {
   );
 };
 
-export default ProfileTab;
+export default AdminProfileTab;

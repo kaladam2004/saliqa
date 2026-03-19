@@ -1,10 +1,21 @@
-import axiosInstance from './axiosInstance';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? '/api';
 
 export const uploadFile = async (file: File): Promise<string> => {
   const formData = new FormData();
   formData.append('file', file);
-  const res = await axiosInstance.post('/uploads', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+
+  const token = localStorage.getItem('accessToken');
+  const res = await fetch(`${API_BASE}/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
   });
-  return res.data.url as string;
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: 'Upload failed' }));
+    throw new Error(err.message ?? 'Upload failed');
+  }
+
+  const data = await res.json();
+  return data.url as string;
 };

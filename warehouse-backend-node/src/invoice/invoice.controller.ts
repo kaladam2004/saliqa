@@ -12,6 +12,9 @@ export class InvoiceController {
   @Get()
   getAll() { return this.service.getAll(); }
 
+  @Get('stats')
+  getStats() { return this.service.getStats(); }
+
   @Get('filter')
   filter(
     @Query('shopId') shopId?: string,

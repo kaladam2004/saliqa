@@ -70,7 +70,13 @@
     "more_items": "+{{count}} ещё",
     "units_short": "{{count}} шт.",
     "invoices_abbr": "накл.",
-    "only_super_admin": "Только Супер Админ может это сделать"
+    "only_super_admin": "Только Супер Админ может это сделать",
+    "today": "Сегодня",
+    "created": "Успешно создано",
+    "updated": "Успешно обновлено",
+    "deleted": "Успешно удалено",
+    "copied": "Скопировано в буфер",
+    "copy": "Копировать"
   },
   "upload": {
     "photo": "Фото",
@@ -98,7 +104,8 @@
     "management": "Управление",
     "reports": "Отчёты",
     "daily_tasks": "Ежедневные задачи",
-    "records": "Записи"
+    "records": "Записи",
+    "catalog": "Каталог"
   },
   "menu": {
     "dashboard": "Панель управления",
@@ -133,7 +140,10 @@
     "bulk_collect_payment": "Общий сбор платежей",
     "my_expenses": "Мои расходы",
     "user_expenses_approval": "Расходы торгпредов",
-    "my_pickups": "Мои заборы"
+    "my_pickups": "Мои заборы",
+    "analytics": "Аналитика",
+    "batches": "Партии",
+    "templates": "Шаблоны"
   },
   "dashboard": {
     "welcome": "Добро пожаловать, {{name}}",
@@ -234,6 +244,8 @@
     "print": "Распечатать",
     "printed": "Распечатана",
     "not_printed": "Не распечатана",
+    "received_by": "Принял",
+    "print_and_view": "Печать / Просмотр",
     "scan_qr": "Сканировать QR",
     "scan_to_verify": "Отсканируйте QR-код распечатанной накладной для проверки",
     "qr_match": "QR-код подтверждён — накладная отмечена как распечатанная",
@@ -314,7 +326,15 @@
     "update_gps": "Обновить геолокацию",
     "gps_updated": "Геолокация обновлена",
     "gps_error": "Не удалось получить геолокацию",
-    "profile_updated": "Профиль обновлён"
+    "profile_updated": "Профиль обновлён",
+    "change_password": "Изменить пароль",
+    "old_password": "Старый пароль",
+    "confirm_password": "Подтвердить пароль",
+    "save_password": "Сохранить пароль",
+    "password_changed": "Пароль успешно изменён",
+    "wrong_old_password": "Старый пароль неверный",
+    "passwords_mismatch": "Пароли не совпадают",
+    "open_map": "Карта"
   },
   "confirm_delete": {
     "title": "Вы уверены, что хотите удалить этот элемент?",
@@ -596,6 +616,50 @@
     "action_return": "Возврат",
     "action_payment": "Оплата",
     "action_expenses": "Расходы"
+  },
+  "analytics": {
+    "title": "Аналитика и отчёты",
+    "financial": "Финансы",
+    "warehouse": "Склад и товары",
+    "invoices": "Накладные",
+    "total_delivered": "Всего отгружено",
+    "total_collected": "Всего собрано",
+    "total_debt": "Общий долг",
+    "total_invoices": "Всего накладных",
+    "paid_invoices": "Оплачено",
+    "unpaid_invoices": "Не оплачено",
+    "stock_value": "Стоимость склада",
+    "total_pickups": "Всего забрано со склада",
+    "total_delivered_qty": "Всего доставлено в магазины",
+    "total_returned_qty": "Всего возвращено",
+    "debt_formula": "Формула долга",
+    "warehouse_formula": "Формула склада",
+    "delivered_to_shops": "(отгружено в магазины)",
+    "payments_received": "(принято платежей)",
+    "total_debt_label": "= общий долг",
+    "units_picked_up": "забрано со склада",
+    "units_delivered": "доставлено в магазины",
+    "units_returned": "возвращено на склад",
+    "units_with_reps": "= у торгпредов"
+  },
+  "batches": {
+    "name": "Название партии",
+    "batch_number": "Номер партии",
+    "manufacture_date": "Дата производства",
+    "expire_date": "Дата истечения",
+    "add_batch": "Добавить партию",
+    "edit_batch": "Редактировать партию",
+    "expired": "просрочено",
+    "expiring_soon": "скоро истекает"
+  },
+  "templates": {
+    "key": "Ключ",
+    "key_hint": "Уникальный идентификатор (например, invoice_header)",
+    "value": "Содержимое",
+    "value_placeholder": "Введите содержимое шаблона...",
+    "add_template": "Добавить шаблон",
+    "edit_template": "Редактировать шаблон",
+    "preview": "Просмотр"
   },
   "expenses": {
     "my_expenses_title": "Мои расходы",

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   Table, Button, Modal, Form, InputNumber, DatePicker, Typography,
-  Tag, Space, Popconfirm, message, AutoComplete, Select, Input,
+  Tag, Space, Popconfirm, message, AutoComplete, Select, Input, Card, Row, Col, Statistic,
 } from 'antd';
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -24,11 +24,18 @@ const AdminExpensesPage: React.FC = () => {
   const [form] = Form.useForm();
   const [open, setOpen] = useState(false);
   const { templates, saveTemplate } = useExpenseTemplates();
+  const [dateFilter, setDateFilter] = useState<{ from?: string; to?: string }>({});
 
-  const { data: expenses = [], isLoading } = useQuery({
+  const { data: allExpenses = [], isLoading } = useQuery({
     queryKey: ['admin-expenses', user?.id],
     queryFn: () => getExpensesByAdmin(user!.id),
     enabled: !!user?.id,
+  });
+
+  const expenses = allExpenses.filter(e => {
+    if (dateFilter.from && new Date(e.date) < new Date(dateFilter.from)) return false;
+    if (dateFilter.to && new Date(e.date) > new Date(dateFilter.to)) return false;
+    return true;
   });
 
   const createMutation = useMutation({
@@ -61,8 +68,18 @@ const AdminExpensesPage: React.FC = () => {
     });
   };
 
+  const setToday = () => setDateFilter({
+    from: dayjs().startOf('day').toISOString(),
+    to: dayjs().endOf('day').toISOString(),
+  });
+
   const columns = [
-    { title: t('common.date'), dataIndex: 'date', key: 'date', render: (v: string) => formatDate(v), sorter: (a: Expense, b: Expense) => a.date.localeCompare(b.date), defaultSortOrder: 'descend' as const },
+    {
+      title: t('common.date'), dataIndex: 'date', key: 'date',
+      render: (v: string) => formatDate(v),
+      sorter: (a: Expense, b: Expense) => a.date.localeCompare(b.date),
+      defaultSortOrder: 'descend' as const,
+    },
     { title: t('common.description'), dataIndex: 'description', key: 'description' },
     {
       title: t('expenses.category'), dataIndex: 'category', key: 'category',
@@ -83,12 +100,43 @@ const AdminExpensesPage: React.FC = () => {
 
   return (
     <div>
-      <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }}>
-        <Title level={4} style={{ margin: 0 }}>{t('expenses.my_expenses_title')} — {formatCurrency(total)}</Title>
+      <Space style={{ marginBottom: 16, justifyContent: 'space-between', width: '100%' }} wrap>
+        <Title level={4} style={{ margin: 0 }}>{t('expenses.my_expenses_title')}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => setOpen(true)}>
           {t('expenses.add_expense')}
         </Button>
       </Space>
+
+      {/* Filters */}
+      <Card style={{ marginBottom: 16 }}>
+        <Row gutter={[12, 12]} align="middle">
+          <Col xs={12} sm={6} md={4}>
+            <DatePicker
+              placeholder={t('common.from')} style={{ width: '100%' }}
+              onChange={v => setDateFilter(f => ({ ...f, from: v ? dayjs(v).startOf('day').toISOString() : undefined }))}
+            />
+          </Col>
+          <Col xs={12} sm={6} md={4}>
+            <DatePicker
+              placeholder={t('common.to')} style={{ width: '100%' }}
+              onChange={v => setDateFilter(f => ({ ...f, to: v ? dayjs(v).endOf('day').toISOString() : undefined }))}
+            />
+          </Col>
+          <Col xs={12} sm={4} md={3}>
+            <Button block onClick={setToday}>{t('common.today')}</Button>
+          </Col>
+          <Col xs={12} sm={4} md={3}>
+            <Button block onClick={() => setDateFilter({})}>{t('common.all')}</Button>
+          </Col>
+          <Col xs={24} sm={10} md={8}>
+            <Statistic
+              title={t('payments.total_collected')}
+              value={total}
+              formatter={v => formatCurrency(Number(v))}
+            />
+          </Col>
+        </Row>
+      </Card>
 
       <Table
         dataSource={expenses}
@@ -107,7 +155,8 @@ const AdminExpensesPage: React.FC = () => {
         destroyOnHidden
       >
         <Form form={form} layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="date" label={t('common.date')} rules={[{ required: true }]}>
+          <Form.Item name="date" label={t('common.date')} rules={[{ required: true }]}
+            initialValue={dayjs()}>
             <DatePicker style={{ width: '100%' }} />
           </Form.Item>
           <Form.Item name="total" label={t('common.amount')} rules={[{ required: true }]}>

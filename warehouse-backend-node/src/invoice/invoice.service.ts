@@ -182,6 +182,50 @@ export class InvoiceService {
     return parseInt(result[0]?.total || '0');
   }
 
+  async getStats() {
+    const manager = this.invoiceRepo.manager;
+
+    const [deliveredResult] = await manager.query(
+      `SELECT COALESCE(SUM(total_price), 0) as total FROM invoices WHERE is_deleted = false AND free = false`
+    );
+    const [collectedResult] = await manager.query(
+      `SELECT COALESCE(SUM(amount), 0) as total FROM payments WHERE is_deleted = false`
+    );
+    const [invoiceCountResult] = await manager.query(
+      `SELECT COUNT(*) as total, SUM(CASE WHEN paid = true THEN 1 ELSE 0 END) as paid FROM invoices WHERE is_deleted = false`
+    );
+    const [warehouseStockResult] = await manager.query(
+      `SELECT COALESCE(SUM(quantity * price), 0) as total FROM products WHERE is_deleted = false`
+    );
+    const [pickupsResult] = await manager.query(
+      `SELECT COALESCE(SUM(uip.quantity), 0) as total FROM user_invoice_products uip JOIN user_invoices ui ON ui.id = uip.user_invoice_id WHERE ui.is_deleted = false AND uip.is_deleted = false`
+    );
+    const [deliveredQtyResult] = await manager.query(
+      `SELECT COALESCE(SUM(ip.quantity), 0) as total FROM invoice_products ip JOIN invoices i ON i.id = ip.invoice_id WHERE i.is_deleted = false AND ip.is_deleted = false`
+    );
+    const [returnedQtyResult] = await manager.query(
+      `SELECT COALESCE(SUM(quantity), 0) as total FROM user_returns WHERE is_deleted = false`
+    );
+
+    const totalDelivered = parseFloat(deliveredResult?.total || '0');
+    const totalCollected = parseFloat(collectedResult?.total || '0');
+    const totalInvoices = parseInt(invoiceCountResult?.total || '0');
+    const paidInvoices = parseInt(invoiceCountResult?.paid || '0');
+
+    return {
+      totalDelivered,
+      totalCollected,
+      totalDebt: Math.max(0, totalDelivered - totalCollected),
+      totalInvoices,
+      paidInvoices,
+      unpaidInvoices: totalInvoices - paidInvoices,
+      warehouseStockValue: parseFloat(warehouseStockResult?.total || '0'),
+      totalProductPickups: parseInt(pickupsResult?.total || '0'),
+      totalProductDelivered: parseInt(deliveredQtyResult?.total || '0'),
+      totalProductReturned: parseInt(returnedQtyResult?.total || '0'),
+    };
+  }
+
   async findById(id: number): Promise<Invoice> {
     const inv = await this.invoiceRepo.findOne({
       where: { id, deleted: false },

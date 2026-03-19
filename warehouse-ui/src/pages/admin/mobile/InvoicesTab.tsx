@@ -10,63 +10,30 @@ import { createPayment } from '../../../api/payments';
 import type { Invoice, PaymentMethod } from '../../../types';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
 import { useTranslation } from 'react-i18next';
-import { buildQrPayload, type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
-import dayjs from 'dayjs';
+import type { PrintInvoiceData as _PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
+import { mobilePrintInvoice } from '../../../utils/mobilePrint';
 
 type Filter = 'all' | 'paid' | 'unpaid';
 
 /* ─── Print helper ─── */
-const printInvoice = (inv: Invoice) => {
-  const data: PrintInvoiceData = {
-    id: inv.id, type: 'inv', date: inv.date,
-    shopId: inv.shop.id, shopTitle: inv.shop.title,
-    userId: inv.user.id, userFullname: inv.user.fullname,
-    totalPrice: inv.totalPrice, notes: inv.notes,
-    products: inv.products.map(p => ({
-      productName: p.productName, quantity: p.quantity,
-      unitPrice: p.unitPrice, totalPrice: p.totalPrice,
-    })),
-  };
-  const qr = buildQrPayload(data);
-  const html = `<!DOCTYPE html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Invoice #${data.id}</title>
-<style>
-  body{font-family:Arial,sans-serif;padding:24px;max-width:600px;margin:0 auto}
-  h2{margin:0 0 4px}
-  .meta{color:#666;font-size:13px;margin-bottom:16px}
-  table{width:100%;border-collapse:collapse;margin:12px 0}
-  th,td{border:1px solid #ddd;padding:7px 10px;font-size:13px;text-align:left}
-  th{background:#f5f5f5;font-weight:600}
-  .total{text-align:right;font-weight:700;font-size:15px;margin-top:8px}
-  .sigs{display:flex;justify-content:space-between;margin-top:48px}
-  .sig{border-top:1px solid #000;width:180px;padding-top:4px;font-size:12px;text-align:center}
-  .qr{float:right}
-  .print-btn{display:block;margin:0 auto 16px;padding:12px 32px;background:#1677ff;color:#fff;border:none;border-radius:8px;font-size:15px;cursor:pointer}
-  @media print{.print-btn{display:none}body{padding:0}}
-</style></head><body>
-<button class="print-btn" onclick="window.print()">🖨 Print</button>
-<div class="qr"><img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(qr)}" width="100" height="100"/></div>
-<h2>Invoice #${data.id}</h2>
-<div class="meta">${dayjs(data.date).format('DD.MM.YYYY HH:mm')}</div>
-<div><b>Shop:</b> ${data.shopTitle}</div>
-<div><b>Rep:</b> ${data.userFullname}</div>
-${data.notes ? `<div><b>Notes:</b> ${data.notes}</div>` : ''}
-<table>
-  <tr><th>Product</th><th>Qty</th><th>Price</th><th>Total</th></tr>
-  ${data.products.map(p => `<tr><td>${p.productName}</td><td>${p.quantity}</td><td>${formatCurrency(p.unitPrice)}</td><td>${formatCurrency(p.totalPrice ?? p.unitPrice * p.quantity)}</td></tr>`).join('')}
-</table>
-<div class="total">Total: ${formatCurrency(data.totalPrice)}</div>
-<div class="sigs"><div class="sig">Sales Rep</div><div class="sig">Signature</div></div>
-<script>window.onload=function(){try{window.print();}catch(e){}}</script>
-</body></html>`;
-  const blob = new Blob([html], { type: 'text/html' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.target = '_blank'; a.rel = 'noopener noreferrer';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 10000);
-};
+const printInvoice = (inv: Invoice) => mobilePrintInvoice({
+  id: inv.id,
+  type: 'inv',
+  date: inv.date,
+  shopId: inv.shop?.id,
+  shopTitle: inv.shop?.title,
+  userId: inv.user?.id ?? 0,
+  userFullname: inv.user?.fullname ?? '',
+  totalPrice: Number(inv.totalPrice),
+  paid: inv.paid,
+  notes: inv.notes,
+  products: (inv.products ?? []).map(p => ({
+    productName: p.productName,
+    quantity: p.quantity,
+    unitPrice: p.unitPrice,
+    totalPrice: p.totalPrice,
+  })),
+});
 
 /* ─── Payment Modal ─── */
 interface PaymentModalProps {

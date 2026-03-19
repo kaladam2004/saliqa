@@ -17,11 +17,13 @@ export class PaymentController {
     @Query('shopId') shopId?: string,
     @Query('from') from?: string,
     @Query('to') to?: string,
+    @Query('userId') userId?: string,
   ) {
     return this.service.filter(
       shopId ? parseInt(shopId) : undefined,
       from ? new Date(from) : undefined,
       to ? new Date(to) : undefined,
+      userId ? parseInt(userId) : undefined,
     );
   }
 

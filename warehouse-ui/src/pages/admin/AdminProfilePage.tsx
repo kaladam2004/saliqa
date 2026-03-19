@@ -3,9 +3,9 @@ import {
   Card, Button, Descriptions, Typography, message, Avatar,
   Form, Input, Divider, Space,
 } from 'antd';
-import { EnvironmentOutlined, UserOutlined, EditOutlined, LockOutlined, EnvironmentFilled } from '@ant-design/icons';
+import { UserOutlined, EditOutlined, LockOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUser, updateUser, updateUserGps } from '../../api/users';
+import { getAdmin, updateAdmin } from '../../api/admins';
 import { changePassword } from '../../api/auth';
 import { useAuthStore } from '../../store/authStore';
 import ImageUpload from '../../components/common/ImageUpload';
@@ -14,12 +14,7 @@ import { useTranslation } from 'react-i18next';
 const imgSrc = (url?: string | null) =>
   !url ? undefined : url.startsWith('http') ? url : `/api${url}`;
 
-const openMap = (gps?: string | null) => {
-  if (!gps) return;
-  window.open(`https://www.google.com/maps?q=${gps}`, '_blank', 'noopener,noreferrer');
-};
-
-const ProfilePage: React.FC = () => {
+const AdminProfilePage: React.FC = () => {
   const { user: auth } = useAuthStore();
   const queryClient = useQueryClient();
   const { t } = useTranslation();
@@ -28,46 +23,30 @@ const ProfilePage: React.FC = () => {
   const [pwForm] = Form.useForm();
   const [changingPw, setChangingPw] = useState(false);
 
-  const { data: user } = useQuery({
-    queryKey: ['user', auth?.id],
-    queryFn: () => getUser(auth!.id),
+  const { data: admin } = useQuery({
+    queryKey: ['admin', auth?.id],
+    queryFn: () => getAdmin(auth!.id),
     enabled: !!auth?.id,
   });
 
   const photoMutation = useMutation({
-    mutationFn: (photo: string | undefined) => updateUser(auth!.id, { ...user!, photo }),
+    mutationFn: (photo: string | undefined) =>
+      updateAdmin(auth!.id, { ...admin!, photo, role: admin!.role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin', auth?.id] });
       message.success(t('profile.profile_updated'));
     },
   });
 
   const editMutation = useMutation({
-    mutationFn: (values: { fullname: string; tel?: string; address?: string; description?: string }) =>
-      updateUser(auth!.id, { ...user!, ...values }),
+    mutationFn: (values: { fullname: string; tel?: string; description?: string }) =>
+      updateAdmin(auth!.id, { ...admin!, ...values, role: admin!.role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
+      queryClient.invalidateQueries({ queryKey: ['admin', auth?.id] });
       message.success(t('profile.profile_updated'));
       setEditing(false);
     },
     onError: () => message.error(t('common.error')),
-  });
-
-  const gpsMutation = useMutation({
-    mutationFn: () =>
-      new Promise<void>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            const gps = `${pos.coords.latitude},${pos.coords.longitude}`;
-            updateUserGps(auth!.id, gps).then(() => {
-              queryClient.invalidateQueries({ queryKey: ['user', auth?.id] });
-              message.success(t('profile.gps_updated'));
-              resolve();
-            }).catch(reject);
-          },
-          () => { message.error(t('profile.gps_error')); reject(); }
-        );
-      }),
   });
 
   const pwMutation = useMutation({
@@ -83,10 +62,9 @@ const ProfilePage: React.FC = () => {
 
   const startEdit = () => {
     form.setFieldsValue({
-      fullname: user?.fullname,
-      tel: user?.tel,
-      address: user?.address,
-      description: user?.description,
+      fullname: admin?.fullname,
+      tel: admin?.tel,
+      description: admin?.description,
     });
     setEditing(true);
   };
@@ -95,28 +73,24 @@ const ProfilePage: React.FC = () => {
     <>
       <Typography.Title level={4}>{t('profile.title')}</Typography.Title>
       <Card style={{ maxWidth: 640 }}>
-        {/* Avatar + photo upload */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 20 }}>
-          <Avatar src={imgSrc(user?.photo)} icon={<UserOutlined />} size={80} />
+          <Avatar src={imgSrc(admin?.photo)} icon={<UserOutlined />} size={80} />
           <div>
-            <Typography.Title level={5} style={{ margin: 0 }}>{user?.fullname}</Typography.Title>
-            <Typography.Text type="secondary">@{user?.username}</Typography.Text>
+            <Typography.Title level={5} style={{ margin: 0 }}>{admin?.fullname}</Typography.Title>
+            <Typography.Text type="secondary">@{admin?.username}</Typography.Text>
+            <Typography.Text type="secondary" style={{ display: 'block' }}>{admin?.role}</Typography.Text>
             <div style={{ marginTop: 8 }}>
-              <ImageUpload value={user?.photo} onChange={url => photoMutation.mutate(url)} hidePreview />
+              <ImageUpload value={admin?.photo} onChange={url => photoMutation.mutate(url)} hidePreview />
             </div>
           </div>
         </div>
 
-        {/* Profile info or edit form */}
         {editing ? (
           <Form form={form} layout="vertical" onFinish={editMutation.mutate}>
             <Form.Item name="fullname" label={t('common.full_name')} rules={[{ required: true }]}>
               <Input />
             </Form.Item>
             <Form.Item name="tel" label={t('common.phone')}>
-              <Input />
-            </Form.Item>
-            <Form.Item name="address" label={t('common.address')}>
               <Input />
             </Form.Item>
             <Form.Item name="description" label={t('common.description')}>
@@ -130,25 +104,11 @@ const ProfilePage: React.FC = () => {
         ) : (
           <>
             <Descriptions column={1} bordered size="small">
-              <Descriptions.Item label={t('common.full_name')}>{user?.fullname || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('common.username')}>{user?.username || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('common.phone')}>{user?.tel || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('common.address')}>{user?.address || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('common.description')}>{user?.description || '-'}</Descriptions.Item>
-              <Descriptions.Item label={t('common.gps')}>
-                <Space>
-                  <span>{user?.gps || t('profile.not_set')}</span>
-                  {user?.gps && (
-                    <Button size="small" icon={<EnvironmentFilled />} onClick={() => openMap(user?.gps)}>
-                      {t('profile.open_map')}
-                    </Button>
-                  )}
-                  <Button size="small" type="primary" icon={<EnvironmentOutlined />}
-                    onClick={() => gpsMutation.mutate()} loading={gpsMutation.isPending}>
-                    {t('profile.update_gps')}
-                  </Button>
-                </Space>
-              </Descriptions.Item>
+              <Descriptions.Item label={t('common.full_name')}>{admin?.fullname || '-'}</Descriptions.Item>
+              <Descriptions.Item label={t('common.username')}>{admin?.username || '-'}</Descriptions.Item>
+              <Descriptions.Item label={t('common.phone')}>{admin?.tel || '-'}</Descriptions.Item>
+              <Descriptions.Item label={t('common.description')}>{admin?.description || '-'}</Descriptions.Item>
+              <Descriptions.Item label={t('common.role')}>{admin?.role || '-'}</Descriptions.Item>
             </Descriptions>
             <Button icon={<EditOutlined />} style={{ marginTop: 16 }} onClick={startEdit}>
               {t('profile.edit_profile')}
@@ -158,7 +118,6 @@ const ProfilePage: React.FC = () => {
 
         <Divider />
 
-        {/* Change password */}
         <Typography.Title level={5} style={{ marginBottom: 12 }}>
           <LockOutlined /> {t('profile.change_password')}
         </Typography.Title>
@@ -201,4 +160,4 @@ const ProfilePage: React.FC = () => {
   );
 };
 
-export default ProfilePage;
+export default AdminProfilePage;

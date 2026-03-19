@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Dropdown, Button } from 'antd';
 import {
   HomeOutlined, AppstoreOutlined, FileTextOutlined,
-  TeamOutlined, EllipsisOutlined, GlobalOutlined, LogoutOutlined,
+  TeamOutlined, EllipsisOutlined, GlobalOutlined, LogoutOutlined, UserOutlined,
 } from '@ant-design/icons';
 import { useAuthStore } from '../../../store/authStore';
 import { useTranslation } from 'react-i18next';
@@ -12,8 +12,9 @@ import ProductsTab from './ProductsTab';
 import InvoicesTab from './InvoicesTab';
 import UsersTab from './UsersTab';
 import MoreTab from './MoreTab';
+import AdminProfileTab from './AdminProfileTab';
 
-type Tab = 'dashboard' | 'products' | 'invoices' | 'users' | 'more';
+type Tab = 'dashboard' | 'products' | 'invoices' | 'users' | 'more' | 'profile';
 
 const LANGUAGES = [
   { key: 'en', label: 'English' },
@@ -37,6 +38,7 @@ const MobileAdminApp: React.FC = () => {
     { key: 'invoices',  icon: <FileTextOutlined />, label: t('menu.invoices') },
     { key: 'users',     icon: <TeamOutlined />, label: t('menu.sales_reps') },
     { key: 'more',      icon: <EllipsisOutlined />, label: t('common.more') || 'More' },
+    { key: 'profile',   icon: <UserOutlined />, label: t('menu.profile') },
   ];
 
   return (
@@ -77,6 +79,7 @@ const MobileAdminApp: React.FC = () => {
         {tab === 'invoices'  && <InvoicesTab />}
         {tab === 'users'     && <UsersTab />}
         {tab === 'more'      && <MoreTab />}
+        {tab === 'profile'   && <AdminProfileTab />}
       </div>
 
       {/* Bottom Tab Bar */}

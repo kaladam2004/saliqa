@@ -70,7 +70,13 @@
     "more_items": "+{{count}} more",
     "units_short": "{{count}} pcs",
     "invoices_abbr": "inv.",
-    "only_super_admin": "Only Super Admin can do this"
+    "only_super_admin": "Only Super Admin can do this",
+    "today": "Today",
+    "created": "Created successfully",
+    "updated": "Updated successfully",
+    "deleted": "Deleted successfully",
+    "copied": "Copied to clipboard",
+    "copy": "Copy"
   },
   "upload": {
     "photo": "Photo",
@@ -98,7 +104,8 @@
     "management": "Management",
     "reports": "Reports",
     "daily_tasks": "Daily Tasks",
-    "records": "Records"
+    "records": "Records",
+    "catalog": "Catalog"
   },
   "menu": {
     "dashboard": "Dashboard",
@@ -133,7 +140,10 @@
     "bulk_collect_payment": "Bulk Collect Payment",
     "my_expenses": "My Expenses",
     "user_expenses_approval": "Rep Expenses Approval",
-    "my_pickups": "My Pickups"
+    "my_pickups": "My Pickups",
+    "analytics": "Analytics",
+    "batches": "Batches",
+    "templates": "Templates"
   },
   "dashboard": {
     "welcome": "Welcome, {{name}}",
@@ -234,6 +244,8 @@
     "print": "Print",
     "printed": "Printed",
     "not_printed": "Not Printed",
+    "received_by": "Received by",
+    "print_and_view": "Print / View",
     "scan_qr": "Scan QR",
     "scan_to_verify": "Scan the printed invoice QR code to verify",
     "qr_match": "QR code verified — invoice marked as printed",
@@ -314,7 +326,15 @@
     "update_gps": "Update My GPS Location",
     "gps_updated": "GPS location updated",
     "gps_error": "Could not get GPS location",
-    "profile_updated": "Profile updated"
+    "profile_updated": "Profile updated",
+    "change_password": "Change Password",
+    "old_password": "Old Password",
+    "confirm_password": "Confirm Password",
+    "save_password": "Save Password",
+    "password_changed": "Password changed successfully",
+    "wrong_old_password": "Old password is incorrect",
+    "passwords_mismatch": "Passwords do not match",
+    "open_map": "Map"
   },
   "confirm_delete": {
     "title": "Are you sure you want to delete this item?",
@@ -596,6 +616,50 @@
     "action_return": "Return",
     "action_payment": "Payment",
     "action_expenses": "Expenses"
+  },
+  "analytics": {
+    "title": "Analytics & Reports",
+    "financial": "Financial",
+    "warehouse": "Warehouse & Products",
+    "invoices": "Invoices",
+    "total_delivered": "Total Delivered",
+    "total_collected": "Total Collected",
+    "total_debt": "Total Debt",
+    "total_invoices": "Total Invoices",
+    "paid_invoices": "Paid",
+    "unpaid_invoices": "Unpaid",
+    "stock_value": "Stock Value",
+    "total_pickups": "Total Pickups from Warehouse",
+    "total_delivered_qty": "Total Delivered to Shops",
+    "total_returned_qty": "Total Returned",
+    "debt_formula": "Debt Formula",
+    "warehouse_formula": "Warehouse Formula",
+    "delivered_to_shops": "(delivered to shops)",
+    "payments_received": "(payments received)",
+    "total_debt_label": "= total debt",
+    "units_picked_up": "picked up from warehouse",
+    "units_delivered": "delivered to shops",
+    "units_returned": "returned to warehouse",
+    "units_with_reps": "= with sales reps"
+  },
+  "batches": {
+    "name": "Batch Name",
+    "batch_number": "Batch Number",
+    "manufacture_date": "Manufacture Date",
+    "expire_date": "Expire Date",
+    "add_batch": "Add Batch",
+    "edit_batch": "Edit Batch",
+    "expired": "expired",
+    "expiring_soon": "expiring soon"
+  },
+  "templates": {
+    "key": "Key",
+    "key_hint": "Unique identifier used in code (e.g. invoice_header)",
+    "value": "Content",
+    "value_placeholder": "Enter template content here...",
+    "add_template": "Add Template",
+    "edit_template": "Edit Template",
+    "preview": "Preview"
   },
   "expenses": {
     "my_expenses_title": "My Expenses",

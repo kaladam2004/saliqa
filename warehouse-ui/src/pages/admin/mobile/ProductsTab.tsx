@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { Input, Modal, Form, Button, message, Tag, Spin, InputNumber } from 'antd';
+import { Input, Modal, Form, Button, message, Tag, Spin, InputNumber, Descriptions } from 'antd';
 import {
   SearchOutlined, EditOutlined, DeleteOutlined,
-  AppstoreOutlined, DollarOutlined, PlusOutlined,
+  AppstoreOutlined, DollarOutlined, PlusOutlined, EyeOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProducts, updateProduct, deleteProduct, createProducts } from '../../../api/products';
@@ -17,6 +17,7 @@ const imgSrc = (url?: string | null) =>
 const ProductsTab: React.FC = () => {
   const [search, setSearch] = useState('');
   const [editProduct, setEditProduct] = useState<Product | null>(null);
+  const [viewProduct, setViewProduct] = useState<Product | null>(null);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [form] = Form.useForm();
   const [createForm] = Form.useForm();
@@ -111,20 +112,23 @@ const ProductsTab: React.FC = () => {
                 boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
                 display: 'flex', gap: 12, alignItems: 'center',
               }}>
-                {/* Image */}
-                <div style={{
-                  width: 52, height: 52, borderRadius: 12, flexShrink: 0,
-                  background: imgSrc(p.image) ? undefined : '#e8f4ff',
-                  overflow: 'hidden',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
+                {/* Image - tappable to view details */}
+                <button
+                  onClick={() => setViewProduct(p)}
+                  style={{
+                    width: 52, height: 52, borderRadius: 12, flexShrink: 0,
+                    background: imgSrc(p.image) ? undefined : '#e8f4ff',
+                    overflow: 'hidden', border: 'none', padding: 0, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  }}
+                >
                   {imgSrc(p.image)
                     ? <img src={imgSrc(p.image)!} alt={p.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <AppstoreOutlined style={{ fontSize: 22, color: '#1677ff' }} />
                   }
-                </div>
+                </button>
                 {/* Info */}
-                <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ flex: 1, minWidth: 0 }} onClick={() => setViewProduct(p)} role="button">
                   <div style={{ fontSize: 14, fontWeight: 600, color: '#1a1a2e', marginBottom: 2 }}>{p.name}</div>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
                     <span style={{ fontSize: 13, color: '#1677ff', fontWeight: 600 }}>
@@ -140,6 +144,16 @@ const ProductsTab: React.FC = () => {
                 </div>
                 {/* Actions */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flexShrink: 0 }}>
+                  <button
+                    onClick={() => setViewProduct(p)}
+                    style={{
+                      width: 32, height: 32, borderRadius: 8, border: 'none',
+                      background: '#f0f7ff', color: '#1677ff', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    }}
+                  >
+                    <EyeOutlined style={{ fontSize: 14 }} />
+                  </button>
                   <button
                     onClick={() => openEdit(p)}
                     style={{
@@ -182,6 +196,40 @@ const ProductsTab: React.FC = () => {
       >
         <PlusOutlined />
       </button>
+
+      {/* Detail Modal */}
+      <Modal
+        title={viewProduct?.name}
+        open={!!viewProduct}
+        onCancel={() => setViewProduct(null)}
+        footer={<Button block onClick={() => setViewProduct(null)}>{t('common.close') || 'Бастан'}</Button>}
+        destroyOnHidden
+      >
+        {viewProduct && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {imgSrc(viewProduct.image) && (
+              <img
+                src={imgSrc(viewProduct.image)!}
+                alt={viewProduct.name}
+                style={{ width: '100%', maxHeight: 220, objectFit: 'contain', borderRadius: 12, background: '#f5f5f5' }}
+              />
+            )}
+            <Descriptions column={1} size="small" bordered>
+              <Descriptions.Item label="ID">{viewProduct.id}</Descriptions.Item>
+              <Descriptions.Item label={t('common.name')}>{viewProduct.name}</Descriptions.Item>
+              <Descriptions.Item label={t('common.price')}>{formatCurrency(viewProduct.price)}</Descriptions.Item>
+              <Descriptions.Item label={t('common.quantity')}>
+                <Tag color={viewProduct.quantity === 0 ? 'red' : viewProduct.quantity < 10 ? 'orange' : 'green'}>
+                  {t('common.units_short', { count: viewProduct.quantity })}
+                </Tag>
+              </Descriptions.Item>
+              {viewProduct.description && (
+                <Descriptions.Item label={t('common.description')}>{viewProduct.description}</Descriptions.Item>
+              )}
+            </Descriptions>
+          </div>
+        )}
+      </Modal>
 
       {/* Edit Modal */}
       <Modal

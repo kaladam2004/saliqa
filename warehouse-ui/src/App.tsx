@@ -23,6 +23,10 @@ import UserPaymentsAdminPage from './pages/admin/UserPaymentsAdminPage';
 import EventLogsPage from './pages/admin/EventLogsPage';
 import AdminExpensesPage from './pages/admin/AdminExpensesPage';
 import UserExpensesAdminPage from './pages/admin/UserExpensesAdminPage';
+import AdminProfilePage from './pages/admin/AdminProfilePage';
+import AnalyticsPage from './pages/admin/AnalyticsPage';
+import BatchesPage from './pages/admin/BatchesPage';
+import TemplatesPage from './pages/admin/TemplatesPage';
 
 // Admin wizards
 import SetupWarehouseWizard from './pages/admin/wizards/SetupWarehouseWizard';
@@ -93,6 +97,9 @@ const App: React.FC = () => {
                 <Route path="wizard/warehouse" element={<SetupWarehouseWizard />} />
                 <Route path="wizard/products" element={<OnboardProductWizard />} />
                 <Route path="wizard/user" element={<OnboardUserWizard />} />
+                {/* Profile + Analytics */}
+                <Route path="profile" element={<AdminProfilePage />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
                 {/* Management */}
                 <Route path="admins" element={<AdminsPage />} />
                 <Route path="users" element={<UsersPage />} />
@@ -108,6 +115,8 @@ const App: React.FC = () => {
                 <Route path="event-logs" element={<EventLogsPage />} />
                 <Route path="my-expenses" element={<AdminExpensesPage />} />
                 <Route path="user-expenses" element={<UserExpensesAdminPage />} />
+                <Route path="batches" element={<BatchesPage />} />
+                <Route path="templates" element={<TemplatesPage />} />
               </Route>
 
               {/* User Routes */}

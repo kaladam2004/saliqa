@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Table, Modal, Form, Input, Button, Space, InputNumber, DatePicker, message, Tag } from 'antd';
-import { EditOutlined, PlusCircleOutlined } from '@ant-design/icons';
+import { Table, Modal, Form, Input, Button, Space, InputNumber, DatePicker, message, Tag, Descriptions, Image, Typography } from 'antd';
+import { EditOutlined, PlusCircleOutlined, EyeOutlined } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getProducts, createProducts, updateProduct, deleteProduct, addQuantity } from '../../api/products';
 import type { Product, ProductRequest } from '../../types';
@@ -14,6 +14,7 @@ const ProductsPage: React.FC = () => {
   const [createModal, setCreateModal] = useState(false);
   const [editModal, setEditModal] = useState(false);
   const [qtyModal, setQtyModal] = useState(false);
+  const [detailModal, setDetailModal] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
   const [form] = Form.useForm();
   const [editForm] = Form.useForm();
@@ -81,9 +82,10 @@ const ProductsPage: React.FC = () => {
     { title: t('common.qty'), dataIndex: 'quantity', render: (v: number) => <Tag color={v > 0 ? 'green' : 'red'}>{v}</Tag> },
     { title: t('products.batches'), dataIndex: 'batches', render: (b: unknown[]) => b?.length ?? 0 },
     {
-      title: t('common.actions'), key: 'actions', width: 130,
+      title: t('common.actions'), key: 'actions', width: 160,
       render: (_: unknown, r: Product) => (
         <Space>
+          <Button icon={<EyeOutlined />} size="small" onClick={() => { setEditing(r); setDetailModal(true); }} />
           <Button icon={<EditOutlined />} size="small" onClick={() => { setEditing(r); editForm.setFieldsValue(r); setEditModal(true); }} />
           <Button icon={<PlusCircleOutlined />} size="small" type="dashed" onClick={() => { setEditing(r); setQtyModal(true); }} title={t('products.add_quantity')} />
           <ConfirmDelete onConfirm={() => deleteMutation.mutate(r.id)} />
@@ -143,6 +145,47 @@ const ProductsPage: React.FC = () => {
             <Button type="primary" htmlType="submit" loading={updateMutation.isPending} block>{t('common.update')}</Button>
           </Form.Item>
         </Form>
+      </Modal>
+
+      {/* Product Detail Modal */}
+      <Modal
+        title={editing?.name}
+        open={detailModal}
+        onCancel={() => setDetailModal(false)}
+        footer={[
+          <Button key="edit" type="primary" onClick={() => { setDetailModal(false); editForm.setFieldsValue(editing); setEditModal(true); }}>
+            {t('common.edit')}
+          </Button>,
+          <Button key="close" onClick={() => setDetailModal(false)}>{t('common.close')}</Button>,
+        ]}
+        width={500}
+      >
+        {editing && (
+          <div style={{ textAlign: 'center', marginBottom: 16 }}>
+            {editing.image
+              ? <Image src={imgSrc(editing.image)!} alt={editing.name} style={{ maxHeight: 220, objectFit: 'contain', borderRadius: 8 }} />
+              : <div style={{ height: 120, background: '#f5f5f5', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#bbb' }}>
+                  {t('upload.photo')}
+                </div>
+            }
+          </div>
+        )}
+        {editing && (
+          <Descriptions column={1} bordered size="small">
+            <Descriptions.Item label="ID">{editing.id}</Descriptions.Item>
+            <Descriptions.Item label={t('common.name')}>
+              <Typography.Text strong>{editing.name}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('common.price')}>
+              <Typography.Text strong style={{ color: '#1677ff' }}>{editing.price?.toLocaleString()}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('common.qty')}>
+              <Tag color={editing.quantity > 0 ? 'green' : 'red'}>{editing.quantity}</Tag>
+            </Descriptions.Item>
+            <Descriptions.Item label={t('common.description')}>{editing.description || '—'}</Descriptions.Item>
+            <Descriptions.Item label={t('products.batches')}>{editing.batches?.length ?? 0}</Descriptions.Item>
+          </Descriptions>
+        )}
       </Modal>
 
       {/* Add Quantity Modal */}

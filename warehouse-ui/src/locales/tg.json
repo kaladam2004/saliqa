@@ -70,7 +70,13 @@
     "more_items": "+{{count}} бештар",
     "units_short": "{{count}} дона",
     "invoices_abbr": "факт.",
-    "only_super_admin": "Танҳо Супер Админ метавонад"
+    "only_super_admin": "Танҳо Супер Админ метавонад",
+    "today": "Имрӯз",
+    "created": "Муваффақона сохта шуд",
+    "updated": "Муваффақона навсозӣ шуд",
+    "deleted": "Муваффақона ҳазф шуд",
+    "copied": "Нусхабардорӣ шуд",
+    "copy": "Нусхабардорӣ"
   },
   "upload": {
     "photo": "Акс",
@@ -98,7 +104,8 @@
     "management": "Идоракунӣ",
     "reports": "Ҳисоботҳо",
     "daily_tasks": "Вазифаҳои рӯзона",
-    "records": "Сабтҳо"
+    "records": "Сабтҳо",
+    "catalog": "Каталог"
   },
   "menu": {
     "dashboard": "Панели идоракунӣ",
@@ -133,7 +140,10 @@
     "bulk_collect_payment": "Пардохти умумии қабул",
     "my_expenses": "Харҷҳои ман",
     "user_expenses_approval": "Харҷҳои намояндагон",
-    "my_pickups": "Гирифтанҳои ман"
+    "my_pickups": "Гирифтанҳои ман",
+    "analytics": "Таҳлил",
+    "batches": "Партияҳо",
+    "templates": "Шаблонҳо"
   },
   "dashboard": {
     "welcome": "Хуш омадед, {{name}}",
@@ -234,6 +244,8 @@
     "print": "Чоп кунед",
     "printed": "Чопшуда",
     "not_printed": "Чоп нашуда",
+    "received_by": "Қабул кард",
+    "print_and_view": "Чоп / Дидан",
     "scan_qr": "QR сканер",
     "scan_to_verify": "QR-кодро аз нусхаи чопшуда скан кунед",
     "qr_match": "QR-код тасдиқ шуд — ҳисоб-фактура чопшуда ишора шуд",
@@ -314,7 +326,15 @@
     "update_gps": "Навсозии геолокатсия",
     "gps_updated": "Геолокатсия навсозӣ шуд",
     "gps_error": "Геолокатсия дастрас нашуд",
-    "profile_updated": "Профил навсозӣ шуд"
+    "profile_updated": "Профил навсозӣ шуд",
+    "change_password": "Иваз кардани рамз",
+    "old_password": "Рамзи кӯҳна",
+    "confirm_password": "Тасдиқи рамз",
+    "save_password": "Нигоҳ доштани рамз",
+    "password_changed": "Рамз бомуваффақият иваз шуд",
+    "wrong_old_password": "Рамзи кӯҳна нодуруст аст",
+    "passwords_mismatch": "Рамзҳо мувофиқат намекунанд",
+    "open_map": "Харита"
   },
   "confirm_delete": {
     "title": "Шумо мутмаин ҳастед, ки ин маводро нест кунед?",
@@ -596,6 +616,50 @@
     "action_return": "Баргашт",
     "action_payment": "Пардохт",
     "action_expenses": "Харҷот"
+  },
+  "analytics": {
+    "title": "Таҳлил ва ҳисобот",
+    "financial": "Молиявӣ",
+    "warehouse": "Анбор ва молҳо",
+    "invoices": "Ҳисоб-фактураҳо",
+    "total_delivered": "Ҷамъи интиқолшуда",
+    "total_collected": "Ҷамъи пардохтшуда",
+    "total_debt": "Қарзи умумӣ",
+    "total_invoices": "Ҷамъи ҳ-фактураҳо",
+    "paid_invoices": "Пардохташуда",
+    "unpaid_invoices": "Пардохт нашуда",
+    "stock_value": "Арзиши захира",
+    "total_pickups": "Ҷамъи аз анбор гирифтан",
+    "total_delivered_qty": "Ҷамъи ба дӯконҳо расонидан",
+    "total_returned_qty": "Ҷамъи баргашт",
+    "debt_formula": "Формулаи қарз",
+    "warehouse_formula": "Формулаи анбор",
+    "delivered_to_shops": "(интиқол ба дӯконҳо)",
+    "payments_received": "(пардохтҳои қабулшуда)",
+    "total_debt_label": "= қарзи умумӣ",
+    "units_picked_up": "аз анбор гирифта шуд",
+    "units_delivered": "ба дӯконҳо расонида шуд",
+    "units_returned": "ба анбор баргаштонида шуд",
+    "units_with_reps": "= дар дасти намояндагон"
+  },
+  "batches": {
+    "name": "Номи партия",
+    "batch_number": "Рақами партия",
+    "manufacture_date": "Санаи истеҳсол",
+    "expire_date": "Санаи анҷом",
+    "add_batch": "Партия илова кунед",
+    "edit_batch": "Партияро таҳрир кунед",
+    "expired": "мӯҳлаташ гузашта",
+    "expiring_soon": "тӯзики анҷом"
+  },
+  "templates": {
+    "key": "Калид",
+    "key_hint": "Идентификатори беназир (масалан, invoice_header)",
+    "value": "Мӯҳтаво",
+    "value_placeholder": "Мӯҳтавои шаблонро ворид кунед...",
+    "add_template": "Шаблон илова кунед",
+    "edit_template": "Шаблонро таҳрир кунед",
+    "preview": "Пешнамоиш"
   },
   "expenses": {
     "my_expenses_title": "Харҷҳои ман",
