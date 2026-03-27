@@ -226,7 +226,9 @@
     "select_user": "Select user",
     "shop_updated": "Shop updated",
     "shop_created": "Shop created",
-    "shop_deleted": "Shop deleted"
+    "shop_deleted": "Shop deleted",
+    "search": "Search shops...",
+    "no_shops": "No shops found"
   },
   "invoices": {
     "page_title": "Invoices",
@@ -253,7 +255,9 @@
     "qr_invalid": "Invalid QR code",
     "camera_unavailable": "Camera not available. Please upload a photo of the QR code.",
     "upload_qr_image": "Upload QR Image",
-    "print_invoice": "Print Invoice"
+    "print_invoice": "Print Invoice",
+    "invoice": "Invoice",
+    "products": "Products"
   },
   "payments": {
     "page_title": "Payments Report",
@@ -279,7 +283,10 @@
     "method_cash": "Cash",
     "method_card": "Card",
     "method_bank": "Bank Transfer",
-    "method_other": "Other"
+    "method_other": "Other",
+    "cash": "Cash",
+    "card": "Card",
+    "transfer": "Bank Transfer"
   },
   "returns": {
     "create_return": "Create Product Return (from Shop)",
@@ -680,6 +687,10 @@
     "pending": "Pending",
     "pending_count": "{{count}} pending",
     "categories": {
+      "food": "Food",
+      "transport": "Transport",
+      "accommodation": "Accommodation",
+      "communication": "Communication",
       "salary": "Salary",
       "fuel": "Fuel",
       "ingredients": "Ingredients",

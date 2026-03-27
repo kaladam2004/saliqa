@@ -26,11 +26,14 @@ async function bootstrap() {
   // Serve photos folder
   const uploadDir = process.env.UPLOAD_DIR || './photos';
   if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+  // Serve at both /photos and /api/photos (frontend uses /api prefix for images)
   app.useStaticAssets(path.resolve(uploadDir), { prefix: '/photos' });
+  app.useStaticAssets(path.resolve(uploadDir), { prefix: '/api/photos' });
   // Backward-compat: also serve old /uploads path if it exists
   const legacyUploads = './uploads';
   if (fs.existsSync(legacyUploads)) {
     app.useStaticAssets(path.resolve(legacyUploads), { prefix: '/uploads' });
+    app.useStaticAssets(path.resolve(legacyUploads), { prefix: '/api/uploads' });
   }
 
   // Serve frontend (warehouse-ui/dist) on same port

@@ -12,7 +12,7 @@ import { getWarehouses, getWarehouse, createWarehouse, updateWarehouse, deleteWa
 import { addQuantity } from '../../../api/products';
 import { getShops, createShop, updateShop, deleteShop } from '../../../api/shops';
 import { getEventLogs } from '../../../api/eventLogs';
-import { getExpenses, createExpense, approveExpense } from '../../../api/expenses';
+import { createExpense, approveExpense, getExpensesByAdmin, getPendingUserExpenses } from '../../../api/expenses';
 import { getUserInvoices } from '../../../api/userInvoices';
 import { getPayments } from '../../../api/payments';
 import { getUserPayments } from '../../../api/userPayments';
@@ -23,7 +23,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../../../store/authStore';
 import type { Warehouse, Shop, EventLog, Expense, WarehouseRequest, ShopRequest, ExpenseRequest, Product } from '../../../types';
 
-type Section = null | 'warehouses' | 'shops' | 'expenses' | 'logs' | 'userInvoices' | 'payments' | 'analytics' | 'userPayments';
+type Section = null | 'warehouses' | 'shops' | 'expenses' | 'userExpenses' | 'logs' | 'userInvoices' | 'payments' | 'analytics' | 'userPayments';
 
 const card = { background: '#fff', borderRadius: 14, padding: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.05)' } as const;
 
@@ -110,14 +110,14 @@ const MoreTab: React.FC = () => {
   });
   const { data: shops = [], isLoading: sLoading } = useQuery({ queryKey: ['shops'], queryFn: getShops });
   const { data: logs = [], isLoading: lLoading } = useQuery({ queryKey: ['event-logs'], queryFn: getEventLogs });
-  const { data: expenses = [], isLoading: eLoading } = useQuery({ queryKey: ['expenses'], queryFn: getExpenses });
+  const { data: expenses = [], isLoading: eLoading } = useQuery({ queryKey: ['my-expenses-admin', authUser?.id], queryFn: () => getExpensesByAdmin(authUser!.id), enabled: !!authUser?.id });
+  const { data: pendingUserExpenses = [] } = useQuery({ queryKey: ['pending-user-expenses'], queryFn: getPendingUserExpenses });
   const { data: userInvoices = [], isLoading: uiLoading } = useQuery({ queryKey: ['user-invoices'], queryFn: getUserInvoices });
   const { data: payments = [], isLoading: pLoading } = useQuery({ queryKey: ['payments'], queryFn: getPayments });
   const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: getUsers });
   const { data: userPayments = [], isLoading: upLoading } = useQuery({ queryKey: ['user-payments-all'], queryFn: getUserPayments });
   const { data: allInvoices = [], isLoading: invLoading } = useQuery({ queryKey: ['all-invoices'], queryFn: () => filterInvoices({}) });
 
-  const pendingExpenses = expenses.filter(e => !e.approved).length;
   const totalPaid = payments.reduce((s, p) => s + p.amount, 0);
   const totalUserPaid = userPayments.reduce((s, p) => s + Number(p.amount), 0);
   const unpaidInvoices = allInvoices.filter(inv => !inv.paid).length;
@@ -302,7 +302,8 @@ const MoreTab: React.FC = () => {
       items: [
         { key: 'analytics' as Section, icon: <RiseOutlined />, label: t('menu.analytics'), count: unpaidInvoices > 0 ? unpaidInvoices : undefined, color: '#1677ff', bg: '#e8f4ff' },
         { key: 'userInvoices' as Section, icon: <InboxOutlined />, label: t('menu.user_invoices'), count: userInvoices.length, color: '#722ed1', bg: '#f9f0ff' },
-        { key: 'expenses' as Section, icon: <BarChartOutlined />, label: t('menu.my_expenses'), count: pendingExpenses > 0 ? pendingExpenses : undefined, color: '#52c41a', bg: '#f0fff4' },
+        { key: 'expenses' as Section, icon: <BarChartOutlined />, label: t('menu.my_expenses'), count: undefined, color: '#52c41a', bg: '#f0fff4' },
+        { key: 'userExpenses' as Section, icon: <CheckOutlined />, label: t('menu.user_expenses_approval'), count: pendingUserExpenses.length > 0 ? pendingUserExpenses.length : undefined, color: '#f5222d', bg: '#fff1f0' },
         { key: 'logs' as Section, icon: <HistoryOutlined />, label: t('menu.event_logs'), count: undefined, color: '#6366f1', bg: '#eef2ff' },
       ],
     },
@@ -704,6 +705,43 @@ const MoreTab: React.FC = () => {
       );
     }
 
+    if (section === 'userExpenses') {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '12px 0' }}>
+          {pendingUserExpenses.length === 0 && (
+            <div style={{ textAlign: 'center', color: '#9ca3af', padding: 24 }}>{t('expenses.approved_label')} ✓</div>
+          )}
+          {pendingUserExpenses.map((e: Expense) => (
+            <div key={e.id} style={{ ...card, borderLeft: '3px solid #f5222d' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{formatCurrency(e.total)}</div>
+                  <div style={{ fontSize: 12, color: '#374151', marginTop: 2 }}>{e.description}</div>
+                  {e.category && <div style={{ fontSize: 11, color: '#9ca3af' }}>{e.category}</div>}
+                  <div style={{ fontSize: 11, color: '#9ca3af', marginTop: 2 }}>{formatDate(e.date)}</div>
+                  {(e.userFullname || e.adminFullname) && (
+                    <div style={{ fontSize: 12, color: '#6b7280', fontWeight: 600, marginTop: 2 }}>
+                      👤 {e.userFullname || e.adminFullname}
+                    </div>
+                  )}
+                </div>
+                <button
+                  onClick={() => approveExpenseMutation.mutate(e.id)}
+                  style={{
+                    padding: '8px 14px', borderRadius: 8, border: 'none', marginLeft: 8,
+                    background: '#f6ffed', color: '#52c41a', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600, fontSize: 13, flexShrink: 0,
+                  }}
+                >
+                  <CheckOutlined /> {t('expenses.approve')}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
     return null;
   };
 
@@ -712,6 +750,7 @@ const MoreTab: React.FC = () => {
       case 'warehouses': return warehouseDetailId ? (warehouseDetail?.title ?? t('menu.warehouses')) : t('menu.warehouses');
       case 'shops': return t('menu.shops');
       case 'expenses': return t('menu.my_expenses');
+      case 'userExpenses': return t('menu.user_expenses_approval');
       case 'logs': return t('menu.event_logs');
       case 'userInvoices': return t('menu.user_invoices');
       case 'payments': return t('menu.payments');
@@ -875,8 +914,17 @@ const MoreTab: React.FC = () => {
           </Form.Item>
           <Form.Item name="category" label={t('expenses.category')}>
             <Select placeholder={t('expenses.select_category')} allowClear>
-              {['FOOD', 'TRANSPORT', 'ACCOMMODATION', 'COMMUNICATION', 'UTILITIES', 'OTHER'].map(c => (
-                <Select.Option key={c} value={c}>{c}</Select.Option>
+              {([
+                ['FOOD', t('expenses.categories.food')],
+                ['TRANSPORT', t('expenses.categories.transport')],
+                ['ACCOMMODATION', t('expenses.categories.accommodation')],
+                ['COMMUNICATION', t('expenses.categories.communication')],
+                ['SALARY', t('expenses.categories.salary')],
+                ['FUEL', t('expenses.categories.fuel')],
+                ['UTILITIES', t('expenses.categories.utilities')],
+                ['OTHER', t('expenses.categories.other')],
+              ] as [string, string][]).map(([val, label]) => (
+                <Select.Option key={val} value={val}>{label}</Select.Option>
               ))}
             </Select>
           </Form.Item>

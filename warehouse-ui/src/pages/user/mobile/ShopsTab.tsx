@@ -784,6 +784,17 @@ const ShopList: React.FC<{ onSelect: (shop: Shop) => void }> = ({ onSelect }) =>
     queryFn: getShops,
   });
 
+  const { data: allInvoices = [] } = useQuery({
+    queryKey: ['shop-invoices-all', user?.id],
+    queryFn: () => filterInvoices({ userId: user?.id }),
+    enabled: !!user?.id,
+  });
+
+  const getShopDebt = (shopId: number) => {
+    const unpaid = allInvoices.filter(inv => inv.shop?.id === shopId && !inv.paid);
+    return { count: unpaid.length, total: unpaid.reduce((s, inv) => s + Number(inv.totalPrice), 0) };
+  };
+
   const myShops = shops.filter(s =>
     (s as any).shopkeeper?.id === user?.id || (s as any).userId === user?.id
   );
@@ -836,7 +847,14 @@ const ShopList: React.FC<{ onSelect: (shop: Shop) => void }> = ({ onSelect }) =>
                   </div>
                 )}
               </div>
-              <div style={{ color: '#d0d7e8', fontSize: 18 }}>›</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                {(() => { const debt = getShopDebt(shop.id); return debt.count > 0 ? (
+                  <span style={{ background: '#fa8c16', color: '#fff', borderRadius: 12, fontSize: 11, fontWeight: 700, padding: '2px 8px' }}>
+                    {debt.count} {t('common.unpaid').toLowerCase()}
+                  </span>
+                ) : null; })()}
+                <span style={{ color: '#d0d7e8', fontSize: 18 }}>›</span>
+              </div>
             </div>
           </div>
         ))}

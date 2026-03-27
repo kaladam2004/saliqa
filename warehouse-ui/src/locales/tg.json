@@ -226,7 +226,9 @@
     "shop_updated": "Дӯкон навсозӣ шуд",
     "shop_created": "Дӯкон сохта шуд",
     "shop_deleted": "Дӯкон нест карда шуд",
-    "add_shop": "Мағоза илова кун"
+    "add_shop": "Мағоза илова кун",
+    "search": "Ҷустуҷӯи дӯконҳо...",
+    "no_shops": "Дӯконҳо ёфт нашуд"
   },
   "invoices": {
     "page_title": "Ҳисоб-фактураҳо",
@@ -253,7 +255,9 @@
     "qr_invalid": "QR-коди нодуруст",
     "camera_unavailable": "Камера дастрас нест. Лутфан акси QR-кодро бор кунед.",
     "upload_qr_image": "Бор кардани тасвири QR",
-    "print_invoice": "Чопи ҳисоб-фактура"
+    "print_invoice": "Чопи ҳисоб-фактура",
+    "invoice": "Ҳуҷҷат",
+    "products": "Молҳо"
   },
   "payments": {
     "page_title": "Ҳисоботи пардохтҳо",
@@ -279,7 +283,10 @@
     "method_cash": "Нақд",
     "method_card": "Карта",
     "method_bank": "Бонк",
-    "method_other": "Дигар"
+    "method_other": "Дигар",
+    "cash": "Нақд",
+    "card": "Корт",
+    "transfer": "Бонкӣ"
   },
   "returns": {
     "create_return": "Сохтани баргашти мол (аз дӯкон)",
@@ -680,10 +687,14 @@
     "pending": "Интизор",
     "pending_count": "{{count}} интизор",
     "categories": {
+      "food": "Хӯрок",
+      "transport": "Нақлиёт",
+      "accommodation": "Истиқомат",
+      "communication": "Алоқа",
       "salary": "Маош",
       "fuel": "Сӯзишворӣ",
       "ingredients": "Компонентҳо",
-      "utilities": "Хизматрасонӣ",
+      "utilities": "Коммуналӣ",
       "other": "Дигар"
     }
   }

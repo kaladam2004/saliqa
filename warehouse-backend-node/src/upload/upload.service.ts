@@ -35,7 +35,7 @@ export class UploadService {
     await sharp(file.buffer)
       .rotate() // auto-rotate based on EXIF orientation
       .resize(800, 800, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85, mozjpeg: true })
+      .jpeg({ quality: 85 })
       .toFile(filepath);
 
     return `/photos/${filename}`;

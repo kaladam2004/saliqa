@@ -226,7 +226,9 @@
     "shop_updated": "Магазин обновлён",
     "shop_created": "Магазин создан",
     "shop_deleted": "Магазин удалён",
-    "add_shop": "Добавить магазин"
+    "add_shop": "Добавить магазин",
+    "search": "Поиск магазинов...",
+    "no_shops": "Магазины не найдены"
   },
   "invoices": {
     "page_title": "Накладные",
@@ -253,7 +255,9 @@
     "qr_invalid": "Недействительный QR-код",
     "camera_unavailable": "Камера недоступна. Загрузите фото QR-кода.",
     "upload_qr_image": "Загрузить изображение QR",
-    "print_invoice": "Печать накладной"
+    "print_invoice": "Печать накладной",
+    "invoice": "Накладная",
+    "products": "Товары"
   },
   "payments": {
     "page_title": "Отчёт по платежам",
@@ -279,7 +283,10 @@
     "method_cash": "Наличные",
     "method_card": "Карта",
     "method_bank": "Банковский перевод",
-    "method_other": "Другое"
+    "method_other": "Другое",
+    "cash": "Наличные",
+    "card": "Карта",
+    "transfer": "Банк. перевод"
   },
   "returns": {
     "create_return": "Возврат товара (из магазина)",
@@ -680,6 +687,10 @@
     "pending": "Ожидает",
     "pending_count": "{{count}} ожидающих",
     "categories": {
+      "food": "Питание",
+      "transport": "Транспорт",
+      "accommodation": "Проживание",
+      "communication": "Связь",
       "salary": "Зарплата",
       "fuel": "Топливо",
       "ingredients": "Ингредиенты",

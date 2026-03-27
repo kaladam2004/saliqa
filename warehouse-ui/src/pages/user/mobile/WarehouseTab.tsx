@@ -531,13 +531,13 @@ const WarehouseReturnsSection: React.FC = () => {
       {filtered.length === 0 && <Empty />}
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {filtered.map(r => (
-          <div key={r.id} style={{ background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: 12, display: 'flex', justifyContent: 'space-between' }}>
-            <div>
-              <Text strong style={{ fontSize: 13 }}>{r.productName}</Text>
-              <div><Text type="secondary" style={{ fontSize: 11 }}>{r.warehouseTitle} • {dayjs(r.date).format('DD.MM.YY')}</Text></div>
+          <div key={r.id} style={{ background: '#fff', borderRadius: 14, boxShadow: '0 2px 8px rgba(0,0,0,0.05)', padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <Text strong style={{ fontSize: 13 }}>{r.productName || `Product #${r.productId}`}</Text>
+              <div><Text type="secondary" style={{ fontSize: 11 }}>{r.warehouseTitle || '—'} • {dayjs(r.date).format('DD.MM.YY')}</Text></div>
               {r.description && <Text type="secondary" style={{ fontSize: 11 }}>{r.description}</Text>}
             </div>
-            <Tag color="red">×{r.quantity}</Tag>
+            <Tag color="red" style={{ flexShrink: 0, marginLeft: 8 }}>×{r.quantity}</Tag>
           </div>
         ))}
       </div>

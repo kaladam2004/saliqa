@@ -5,7 +5,9 @@ import {
   PrinterOutlined, DollarOutlined,
 } from '@ant-design/icons';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getInvoices, markInvoicePaid } from '../../../api/invoices';
+import { filterInvoices, markInvoicePaid } from '../../../api/invoices';
+import { getShops } from '../../../api/shops';
+import { getUsers } from '../../../api/users';
 import { createPayment } from '../../../api/payments';
 import type { Invoice, PaymentMethod } from '../../../types';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
@@ -118,18 +120,28 @@ const InvoicesTab: React.FC = () => {
   const { t } = useTranslation();
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
+  const [shopFilter, setShopFilter] = useState<number | undefined>();
+  const [userFilter, setUserFilter] = useState<number | undefined>();
+  const [dateFrom, setDateFrom] = useState<string | undefined>();
+  const [dateTo, setDateTo] = useState<string | undefined>();
+
   const [selected, setSelected] = useState<Invoice | null>(null);
   const [paymentInvoice, setPaymentInvoice] = useState<Invoice | null>(null);
   const queryClient = useQueryClient();
 
-  const { data: invoices = [], isLoading } = useQuery({ queryKey: ['invoices'], queryFn: getInvoices });
+  const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
+    queryKey: ['invoices', shopFilter, userFilter, dateFrom, dateTo],
+    queryFn: () => filterInvoices({ shopId: shopFilter, userId: userFilter, from: dateFrom, to: dateTo }),
+  });
+  const { data: shops = [] } = useQuery({ queryKey: ['shops'], queryFn: getShops });
+  const { data: users = [] } = useQuery({ queryKey: ['users'], queryFn: getUsers });
 
   const markPaidMutation = useMutation({
     mutationFn: markInvoicePaid,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['invoices'] }); setSelected(null); },
   });
 
-  const filtered = invoices.filter(inv => {
+  const filtered = invoices.filter((inv: Invoice) => {
     const matchSearch =
       inv.shop?.title?.toLowerCase().includes(search.toLowerCase()) ||
       inv.user?.fullname?.toLowerCase().includes(search.toLowerCase()) ||
@@ -177,6 +189,25 @@ const InvoicesTab: React.FC = () => {
           </button>
         ))}
       </div>
+
+      {/* Advanced filters */}
+      <div style={{ display: 'flex', gap: 6, padding: '4px 12px', flexShrink: 0 }}>
+        <Select placeholder={t('common.shop')} allowClear style={{ flex: 1 }}
+          value={shopFilter} onChange={setShopFilter} size="small">
+          {shops.map(s => <Select.Option key={s.id} value={s.id}>{s.title}</Select.Option>)}
+        </Select>
+        <Select placeholder={t('common.sales_rep')} allowClear style={{ flex: 1 }}
+          value={userFilter} onChange={setUserFilter} size="small">
+          {users.map(u => <Select.Option key={u.id} value={u.id}>{u.fullname}</Select.Option>)}
+        </Select>
+      </div>
+      <div style={{ display: 'flex', gap: 6, padding: '4px 12px 6px', flexShrink: 0 }}>
+        <input type="date" value={dateFrom ?? ''} onChange={e => setDateFrom(e.target.value || undefined)}
+          style={{ flex: 1, border: '1px solid #d9d9d9', borderRadius: 6, padding: '4px 8px', fontSize: 12 }} />
+        <input type="date" value={dateTo ?? ''} onChange={e => setDateTo(e.target.value || undefined)}
+          style={{ flex: 1, border: '1px solid #d9d9d9', borderRadius: 6, padding: '4px 8px', fontSize: 12 }} />
+      </div>
+
       <div style={{ padding: '2px 12px 6px', fontSize: 12, color: '#9ca3af' }}>
         {filtered.length} {t('menu.invoices').toLowerCase()}
       </div>
