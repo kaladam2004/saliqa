@@ -1,9 +1,10 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import { Modal, Button, Space } from 'antd';
 import { PrinterOutlined, FilePdfOutlined } from '@ant-design/icons';
 import { QRCodeSVG } from 'qrcode.react';
 import { useReactToPrint } from 'react-to-print';
 import { formatCurrency } from '../../utils/helpers';
+import { downloadInvoicePDF } from '../../utils/mobilePrint';
 import { useTranslation } from 'react-i18next';
 import dayjs from 'dayjs';
 
@@ -253,11 +254,22 @@ PrintContent.displayName = 'PrintContent';
 const InvoicePrintModal: React.FC<Props> = ({ open, data, onClose }) => {
   const { t } = useTranslation();
   const printRef = useRef<HTMLDivElement>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   const handlePrint = useReactToPrint({
     contentRef: printRef,
     documentTitle: data ? `Invoice-${data.id}` : 'Invoice',
   });
+
+  const handlePDF = async () => {
+    if (!data) return;
+    setPdfLoading(true);
+    try {
+      await downloadInvoicePDF(data);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   if (!data) return null;
   const qr = buildQrPayload(data);
@@ -274,7 +286,8 @@ const InvoicePrintModal: React.FC<Props> = ({ open, data, onClose }) => {
           <Button onClick={onClose}>{t('common.close')}</Button>
           <Button
             icon={<FilePdfOutlined />}
-            onClick={() => handlePrint()}
+            loading={pdfLoading}
+            onClick={handlePDF}
           >
             PDF
           </Button>

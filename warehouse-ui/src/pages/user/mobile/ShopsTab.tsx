@@ -20,7 +20,7 @@ import { getShops } from '../../../api/shops';
 import type { Invoice, Shop, PaymentMethod } from '../../../types';
 import { formatCurrency } from '../../../utils/helpers';
 import { type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
-import { mobilePrintInvoice } from '../../../utils/mobilePrint';
+import { downloadInvoicePDF } from '../../../utils/mobilePrint';
 import QRScannerModal, { type QRVerifyTarget } from '../../../components/common/QRScannerModal';
 
 const { Text } = Typography;
@@ -475,7 +475,7 @@ const InvoicesSection: React.FC<{ shop: Shop }> = ({ shop }) => {
                   size="small"
                   icon={<PrinterOutlined />}
                   onClick={() => {
-                    mobilePrintInvoice(toPrint(inv));
+                    downloadInvoicePDF(toPrint(inv));
                     if (!inv.printed) markPrinted.mutate(inv.id);
                   }}
                 >

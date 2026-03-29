@@ -1,7 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
-import sharp from 'sharp';
+import * as sharp from 'sharp';
 import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()

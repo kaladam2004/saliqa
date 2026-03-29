@@ -12,13 +12,12 @@ import { createPayment } from '../../../api/payments';
 import type { Invoice, PaymentMethod } from '../../../types';
 import { formatCurrency, formatDate } from '../../../utils/helpers';
 import { useTranslation } from 'react-i18next';
-import type { PrintInvoiceData as _PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
-import { mobilePrintInvoice } from '../../../utils/mobilePrint';
+import { downloadInvoicePDF } from '../../../utils/mobilePrint';
 
 type Filter = 'all' | 'paid' | 'unpaid';
 
 /* ─── Print helper ─── */
-const printInvoice = (inv: Invoice) => mobilePrintInvoice({
+const printInvoice = (inv: Invoice) => downloadInvoicePDF({
   id: inv.id,
   type: 'inv',
   date: inv.date,

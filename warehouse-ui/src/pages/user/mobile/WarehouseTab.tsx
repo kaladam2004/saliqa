@@ -21,7 +21,7 @@ import type {
 } from '../../../types';
 import { formatCurrency } from '../../../utils/helpers';
 import { type PrintInvoiceData } from '../../../components/common/InvoicePrintModal';
-import { mobilePrintInvoice } from '../../../utils/mobilePrint';
+import { downloadInvoicePDF } from '../../../utils/mobilePrint';
 import QRScannerModal, { type QRVerifyTarget } from '../../../components/common/QRScannerModal';
 
 const { Text } = Typography;
@@ -308,7 +308,7 @@ const PickupsSection: React.FC = () => {
                     </>
                   )}
                   <Space style={{ marginTop: 8 }} wrap>
-                    <Button size="small" icon={<PrinterOutlined />} onClick={() => mobilePrintInvoice(toPrint(inv))}>{t('invoices.print')}</Button>
+                    <Button size="small" icon={<PrinterOutlined />} onClick={() => downloadInvoicePDF(toPrint(inv))}>{t('invoices.print')}</Button>
                     {!inv.printed && (
                       <Button size="small" icon={<ScanOutlined />} onClick={() => setScanTarget({
                         type: 'uinv', id: inv.id, warehouseId: inv.warehouse.id, userId: inv.user.id, total: inv.totalPrice,

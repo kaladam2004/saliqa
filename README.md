@@ -376,22 +376,98 @@ warehouse-wms-main/
 
 ## Ран кардан
 
+### Роҳи 1 — Docker (тавсия мешавад, содда)
+
+> Пешшарт: [Docker Desktop](https://www.docker.com/products/docker-desktop/) насб шуда бошад.
+
 ```bash
-# Сервер (build аллакай тайёр аст)
-cd "/Users/hikmatullo/Downloads/warehouse-wms-main 2/warehouse-backend-node"
-node dist/main.js
+cd warehouse-backend-node
 
-# Пас аз тағйири код
-cd ".../warehouse-ui" && npm run build
-cd ".../warehouse-backend-node" && npm run build && node dist/main.js
+# 1. Файли .env созед
+cp .env.example .env
 
-# Ngrok (дастрасӣ аз интернет)
-ngrok http 8080
+# 2. Лоиҳаро бо Docker бало кунед (PostgreSQL + Backend + Frontend)
+docker compose up -d
+
+# 3. Рафтан ба браузер
+# http://localhost:8080
+# Вуруд: superadmin / Admin@1234
 ```
 
-**Портҳо:** `localhost:8080` — frontend + API + аксҳо (`/photos/`)
+Барои қатъ кардан:
+```bash
+docker compose down
+```
+
+---
+
+### Роҳи 2 — Бе Docker (дастӣ)
+
+> Пешшарт: Node.js ≥ 18, PostgreSQL насб ва кор кунад.
+
+**Қадами 1 — Backend:**
+```bash
+cd warehouse-backend-node
+
+# .env созед ва маълумоти PostgreSQL-ро пур кунед
+cp .env.example .env
+
+# Вобастагиҳо насб кунед
+npm install
+
+# Сохтмон ва оғоз
+npm run build
+npm run start
+```
+
+**Қадами 2 — Frontend** (дар терминали дигар):
+```bash
+cd warehouse-ui
+
+# Вобастагиҳо насб кунед
+npm install
+
+# Барои production: build карда ба backend иҷозат диҳед
+npm run build
+# → Build ба warehouse-backend-node/dist/client мерасад ва
+#   backend онро static файл тариқа serve мекунад
+
+# Ё барои development (hot reload):
+npm run dev
+# → http://localhost:5173
+```
+
+---
+
+### Роҳи 3 — Танҳо backend (build аллакай тайёр)
+
+Агар `dist/` пешакӣ мавҷуд бошад:
+```bash
+cd warehouse-backend-node
+cp .env.example .env   # агар нест бошад
+node dist/main.js
+```
+
+---
+
+### Портҳо
+
+| Хизмат | Порт | URL |
+|--------|------|-----|
+| Backend API + Frontend + аксҳо | `8080` | http://localhost:8080 |
+| Frontend (dev режим) | `5173` | http://localhost:5173 |
+
+**Вуруди пешфарз:** `superadmin` / `Admin@1234`
 
 Multi-language UI: English / Русский / Тоҷикӣ
+
+---
+
+### Дастрасӣ аз интернет (Ngrok)
+
+```bash
+ngrok http 8080
+```
 
 ---
 
